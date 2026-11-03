@@ -130,17 +130,38 @@
     return out;
   }
 
-  // Each weight is { label, grains }.
-  function weights(mode, calIndex, metric) {
+  function shotgunWeights(calIndex, metric) {
     const out = [];
-    if (mode === 'shotgun') {
-      const [a, b] = GAUGES[calIndex].eighths;
-      for (let e = a; e <= b; e++) {
-        const oz = e / 8;
-        out.push({ label: metric ? (oz * GRAMS_PER_OUNCE).toFixed(2) + ' g' : oz.toFixed(3) + ' oz', grains: oz * GRAINS_PER_OUNCE, ounces: oz });
-      }
+    const [a, b] = GAUGES[calIndex].eighths;
+    for (let e = a; e <= b; e++) {
+      const oz = e / 8;
+      out.push({ label: metric ? (oz * GRAMS_PER_OUNCE).toFixed(2) + ' g' : oz.toFixed(3) + ' oz', grains: oz * GRAINS_PER_OUNCE, ounces: oz });
+    }
+    return out;
+  }
+
+  // Each weight is { label, grains }, from 0.8 x typical min to 1.2 x typical max,
+  // in every whole grain (or every 0.1 g in metric; 0.05 or 0.02 g for small bullets).
+  function weights(mode, calIndex, metric) {
+    if (mode === 'shotgun') return shotgunWeights(calIndex, metric);
+    const row = window.BTS_DATA[mode][calIndex];
+    const out = [];
+    if (!metric) {
+      const lo = roundHalfEven(0.8 * row[2]), hi = roundHalfEven(1.2 * row[3]);
+      for (let g = lo; g <= hi; g++) out.push({ label: g + ' gr', grains: g });
       return out;
     }
+    const loG = 0.8 * row[2] * GRAMS_PER_GRAIN, hiG = 1.2 * row[3] * GRAMS_PER_GRAIN;
+    const span = hiG - loG, per = span < 1 ? 50 : span < 5 ? 20 : 10;   // steps per gram
+    const lo = Math.round(loG * per), hi = Math.round(hiG * per);
+    for (let t = lo; t <= hi; t++) out.push({ label: (t / per).toFixed(per === 10 ? 1 : 2) + ' g', grains: t / per / GRAMS_PER_GRAIN });
+    return out;
+  }
+
+  // The coarser weight lists that version-1 share links point into (also used by the tests).
+  function v1Weights(mode, calIndex, metric) {
+    const out = [];
+    if (mode === 'shotgun') return shotgunWeights(calIndex, metric);
     const row = window.BTS_DATA[mode][calIndex];
     const mn = row[2], mx = row[3];
     if (!metric) {
@@ -212,7 +233,7 @@
 
   window.BTS = {
     roundHalfEven, solve, trajectory, laserOffset,
-    calibers, sightHeights, weights, shapes, typicalVelocityFps, typicalBc, zeroRanges, targetRanges,
+    calibers, sightHeights, weights, v1Weights, shapes, typicalVelocityFps, typicalBc, zeroRanges, targetRanges,
     MODES, GAUGES, SLUGS, CM_PER_INCH, METERS_PER_YARD,
     ATMOSPHERE: { densityLbFt3: RHO, soundFps: SOUND }
   };

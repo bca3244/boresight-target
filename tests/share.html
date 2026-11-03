@@ -32,13 +32,13 @@ function code(w, c) {
   const metric = !!c.metric, mode = c.mode;
   const ci = B.calibers(mode).indexOf(c.caliber);
   const si = B.sightHeights(mode, metric).findIndex(s => Math.abs(s.value - c.sight) < 1e-9);
-  const ws = B.weights(mode, ci, metric);
+  const ws = c.v1 ? B.v1Weights(mode, ci, metric) : B.weights(mode, ci, metric);
   if (c.weight === 'middle') c.weight = ws[Math.floor(ws.length / 2)].label;
   const wi = ws.findIndex(x => x.label === c.weight);
   const hi = B.shapes(mode, ci).findIndex(s => s.label === c.shape);
   const zi = B.zeroRanges(mode).indexOf(c.zero);
   const flags = B.MODES.indexOf(mode) * 8 + (metric ? 4 : 0) + (c.a4 ? 2 : 0) + (c.full ? 1 : 0);
-  let s = '#1' + flags.toString(36) + b36(ci, 2) + b36(si, 2) + b36(wi, 2) + b36(hi, 1) + b36(zi, 1) + b36(c.target || 0, 2);
+  let s = (c.v1 ? '#1' : '#2') + flags.toString(36) + b36(ci, 2) + b36(si, 2) + b36(wi, 2) + b36(hi, 1) + b36(zi, 1) + b36(c.target || 0, 2);
   if (c.v) s += b36(c.v, 3) + b36(c.bc * 1000, 3);
   return s;
 }
@@ -50,13 +50,15 @@ const CASES = [
   { name: '300 WM 180, target 22 yd', mode: 'rifle', caliber: '300 Winchester Mag', sight: 1.5, weight: '180 gr', shape: 'Pointed', zero: 150, meet: '36.8', targetValue: 22, offset: '0.60 in' },
   { name: 'Own load 3215 fps / 0.239 (223)', mode: 'rifle', caliber: '223 Rem (5.56x45mm)', sight: 1.5, weight: '60 gr', shape: 'Boat-Tail', zero: 100, v: 3215, bc: 0.239, meet: '44.9', custom: true },
   { name: 'Metric, A4, full chart (308)', mode: 'rifle', caliber: '308 Win (7.62x51mm)', sight: 3.8, weight: 'middle', shape: 'Pointed', zero: 100, metric: true, a4: true, full: true },
+  { name: '350 Legend 170 gr', mode: 'rifle', caliber: '350 Legend', sight: 1.5, weight: '170 gr', shape: 'Pointed', zero: 100 },
+  { name: 'Old version-1 link (300 WM 180 gr)', mode: 'rifle', caliber: '300 Winchester Mag', sight: 1.5, weight: '180 gr', shape: 'Pointed', zero: 150, meet: '36.8', v1: true },
   { name: 'Refused zero still round-trips', mode: 'pistol', caliber: '9mm Luger (9x19mm)', sight: 0.9, weight: '124 gr', shape: 'Round Nose', zero: 25, error: true }
 ];
 
 (async () => {
   await load('');
   const defaultHash = frame.contentWindow.location.hash;
-  row('Default page writes a settings code', 'code like #1 + 11 characters', defaultHash, /^#1[0-9a-z]{11}$/.test(defaultHash));
+  row('Default page writes a settings code', 'code like #2 + 11 characters', defaultHash, /^#2[0-9a-z]{11}$/.test(defaultHash));
 
   for (const c of CASES) {
     await load('');
@@ -71,7 +73,8 @@ const CASES = [
     await load(want);
     const d = frame.contentDocument, sel = id => d.getElementById(id).selectedOptions[0]?.textContent || '';
     const got = frame.contentWindow.location.hash;
-    row(c.name + ': link unchanged after load', want, got, got === want);
+    if (c.v1) row(c.name + ': rewritten as a version-2 link', '#2…', got, /^#2/.test(got));
+    else row(c.name + ': link unchanged after load', want, got, got === want);
     row(c.name + ': caliber', c.caliber, sel('caliber'), sel('caliber') === c.caliber);
     row(c.name + ': weight / shape', c.weight + ' / ' + c.shape, sel('weight') + ' / ' + sel('shape'), sel('weight') === c.weight && sel('shape') === c.shape);
     if (c.meet) row(c.name + ': meet distance', c.meet, d.getElementById('meet').textContent, d.getElementById('meet').textContent === c.meet);

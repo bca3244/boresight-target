@@ -229,21 +229,21 @@
   }
 
   // ---------- Shareable link ----------
-  // Every setting lives in a short base-36 code after the #, e.g. index.html#10ac1123110100:
-  //   1           format version
+  // Every setting lives in a short base-36 code after the #, e.g. index.html#20200b2y2100:
+  //   2           format version (1 = links made before weights went to 1-grain steps)
   //   flags       firearm * 8 + metric * 4 + A4 * 2 + full-zero chart
   //   2 chars     caliber, sight height and weight (positions in their lists)
   //   1 char      shape, then zero range
   //   2 chars     target range (0 = meet distance)
   //   3 + 3       optional: your own velocity (in the displayed unit) and B.C. x 1000
-  const SHARE_RE = /^#1([0-9a-n])([0-9a-z]{2})([0-9a-z]{2})([0-9a-z]{2})([0-9a-z])([0-9a-z])([0-9a-z]{2})(?:([0-9a-z]{3})([0-9a-z]{3}))?$/;
+  const SHARE_RE = /^#([12])([0-9a-n])([0-9a-z]{2})([0-9a-z]{2})([0-9a-z]{2})([0-9a-z])([0-9a-z])([0-9a-z]{2})(?:([0-9a-z]{3})([0-9a-z]{3}))?$/;
   let urlReady = false;   // no URL writes while the page is still starting up
   const b36 = (n, len) => Math.max(0, Math.round(n)).toString(36).padStart(len, '0').slice(-len);
 
   function shareCode() {
     const flags = BTS.MODES.indexOf(state.mode) * 8 + (metric() ? 4 : 0) + (state.paper === 'a4' ? 2 : 0) + (state.plot === 'full' ? 1 : 0);
     const target = state.result && !state.result.error ? idx(el.target) : 0;
-    let code = '1' + flags.toString(36) + b36(idx(el.caliber), 2) + b36(idx(el.sight), 2) + b36(idx(el.weight), 2) +
+    let code = '2' + flags.toString(36) + b36(idx(el.caliber), 2) + b36(idx(el.sight), 2) + b36(idx(el.weight), 2) +
       b36(idx(el.shape), 1) + b36(idx(el.zero), 1) + b36(target, 2);
     if (state.custom && state.vFps > 0 && state.bc > 0) {
       code += b36(metric() ? state.vFps / FPS_PER_MPS : state.vFps, 3) + b36(state.bc * 1000, 3);
@@ -259,8 +259,9 @@
 
   // Restores settings from a link. Returns false (and changes nothing) if the hash isn't a settings code.
   function applyShareCode(hash) {
-    const m = hash.match(SHARE_RE);
-    if (!m) return false;
+    const full = hash.match(SHARE_RE);
+    if (!full) return false;
+    const version = full[1], m = full.slice(1);   // m[1..9] are the fields after the version
     const n = s => parseInt(s, 36);
     const flags = n(m[1]), mode = BTS.MODES[flags >> 3];
     if (!mode) return false;
@@ -275,7 +276,12 @@
     setPressed('[data-plot]', 'data-plot', state.plot);
     buildCalibers(null); pick(el.caliber, n(m[2]));
     buildSights(null); pick(el.sight, n(m[3]));
-    buildWeights(null); pick(el.weight, n(m[4]));
+    buildWeights(null);
+    if (version === '1') {
+      // Version-1 links point into a coarser weight list; find the same weight in today's list.
+      const old = BTS.v1Weights(state.mode, idx(el.caliber), metric())[n(m[4])];
+      if (old) pick(el.weight, nearestIndex(state.lists.weights, old.grains, w => w.grains));
+    } else pick(el.weight, n(m[4]));
     buildShapes(null); pick(el.shape, n(m[5]));
     buildZeros(null); pick(el.zero, n(m[6]));
     if (m[8]) {

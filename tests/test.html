@@ -76,12 +76,26 @@ CASES.forEach(([mode, cal, wt, shape, sight, zero, vExp, bcExp, meetExp, offsets
   }
 });
 
+// The version-1 lists (kept for old links) must stay the same...
 LISTS.forEach(([mode, cal, first, step, last]) => {
-  const list = BTS.weights(mode, BTS.calibers(mode).indexOf(cal), false).map(w => w.grains);
+  const list = BTS.v1Weights(mode, BTS.calibers(mode).indexOf(cal), false).map(w => w.grains);
   const got = `${list[0]}, step ${list[1] - list[0]}, last ${list[list.length - 1]}`;
-  row(cal + ' weight list', `${first}, step ${step}` + (last ? `, last ${last}` : ''), got,
+  row(cal + ' version-1 weight list', `${first}, step ${step}` + (last ? `, last ${last}` : ''), got,
       list[0] === first && list[1] - list[0] === step && (last === null || list[list.length - 1] === last));
 });
+// ...while the page's lists cover the same range in 1-grain steps.
+LISTS.forEach(([mode, cal]) => {
+  const ci = BTS.calibers(mode).indexOf(cal);
+  const orig = BTS.v1Weights(mode, ci, false).map(w => w.grains), list = BTS.weights(mode, ci, false).map(w => w.grains);
+  const steps1 = list.every((g, i) => i === 0 || g - list[i - 1] === 1);
+  const covers = orig.every(g => list.includes(g)) && list[0] === orig[0];
+  row(cal + ' page weight list', `${orig[0]}+ in 1-gr steps, includes all version-1 weights`, `${list[0]}..${list[list.length - 1]}, 1-gr steps ${steps1}`, steps1 && covers);
+});
+{
+  const ci = BTS.calibers('rifle').indexOf('350 Legend');
+  const has = BTS.weights('rifle', ci, false).some(w => w.grains === 170);
+  row('350 Legend offers 170 gr', 'yes', has ? 'yes' : 'no', has);
+}
 
 row('Sight cutoff: 0.9 in starts at 1', 1, BTS.targetRanges(0.9, 22.1)[0], BTS.targetRanges(0.9, 22.1)[0] === 1);
 row('Sight cutoff: 1.5 in starts at 8', 8, BTS.targetRanges(1.5, 44.9)[0], BTS.targetRanges(1.5, 44.9)[0] === 8);
