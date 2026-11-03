@@ -1121,5 +1121,21 @@
   urlReady = true;
   syncUrl();
 
+  // ---------- Offline and install ----------
+  // The service worker keeps a copy of the site for use without a connection (not available when opened from disk).
+  if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => {});
+  // Browsers that offer installing (Chrome, Edge, Android) get an Install button; iOS uses Share > Add to Home Screen.
+  const installBtn = $('install');
+  let installPrompt = null;
+  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installPrompt = e; installBtn.hidden = false; });
+  installBtn.addEventListener('click', async () => {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    await installPrompt.userChoice;
+    installPrompt = null;
+    installBtn.hidden = true;
+  });
+  window.addEventListener('appinstalled', () => { installBtn.hidden = true; });
+
   window.BTS_APP = { state, render, print };
 })();

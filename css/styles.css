@@ -50,7 +50,7 @@ button, input, select { font: inherit; color: inherit; }
 .brand-mark .laser-dot { fill: var(--laser); }
 .brand h1 { font-size: 21px; }
 .tagline { color: var(--muted); font-size: 13.5px; }
-.prefs { display: flex; align-items: center; gap: 10px; }
+.prefs { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
 /* ---------- Layout ---------- */
 .layout { display: grid; grid-template-columns: minmax(300px, 400px) minmax(0, 1fr); gap: 20px; align-items: start; }
@@ -176,6 +176,8 @@ input.custom { border-color: #a07a1d; }
 .how[open] .chev { transform: rotate(180deg); }
 .how ol { margin: 0; padding: 0 20px 18px 40px; color: var(--muted); display: grid; gap: 6px; }
 .how strong { color: var(--text); }
+.how .how-note { margin: -6px 20px 18px; padding-top: 12px; border-top: 1px solid var(--border); color: var(--muted); font-size: 13.5px; }
+#install[hidden] { display: none; }
 
 /* ---------- Collapsible cards ---------- */
 .card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }

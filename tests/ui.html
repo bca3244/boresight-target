@@ -34,6 +34,9 @@ function set(d, id, value, ev = 'input') { const e = d.getElementById(id); e.val
   try { ['bts.saved', 'bts.plot'].forEach(k => frame.contentWindow.localStorage.removeItem(k)); } catch (e) { /* storage blocked */ }
   await load('');   // again, so the chart starts from its default view
   const w = frame.contentWindow, d = frame.contentDocument;
+  row('Install button stays hidden until the browser offers installing', 'hidden', d.getElementById('install').hidden ? 'hidden' : 'shown', d.getElementById('install').hidden);
+  row('Page links the app manifest and icon', 'manifest + apple-touch-icon', (d.querySelector('link[rel=manifest]') ? 'manifest' : 'no manifest') + (d.querySelector('link[rel=apple-touch-icon]') ? ' + apple-touch-icon' : ''),
+      !!d.querySelector('link[rel=manifest]') && !!d.querySelector('link[rel=apple-touch-icon]'));
   row('Chart opens on Full zero', 'full pressed', d.querySelector('[data-plot="full"]').getAttribute('aria-pressed') === 'true' ? 'full pressed' : 'near pressed',
       d.querySelector('[data-plot="full"]').getAttribute('aria-pressed') === 'true' && d.querySelector('[data-plot="near"]').getAttribute('aria-pressed') === 'false');
   const sel = id => d.getElementById(id).selectedOptions[0]?.textContent || '';
