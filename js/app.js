@@ -39,7 +39,7 @@
   const state = {
     units: loadPref('units', 'english') === 'metric' ? 'metric' : 'english',
     paper: loadPref('paper', 'letter') === 'a4' ? 'a4' : 'letter',
-    plot: loadPref('plot', 'near') === 'full' ? 'full' : 'near',
+    plot: loadPref('plot', 'full') === 'near' ? 'near' : 'full',
     mode: 'rifle',
     lists: {},          // current option arrays: sights, weights, shapes, zeros, targets
     vFps: 0, bc: 0,     // load used for the solution

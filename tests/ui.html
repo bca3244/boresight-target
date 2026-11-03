@@ -31,8 +31,11 @@ function set(d, id, value, ev = 'input') { const e = d.getElementById(id); e.val
 
 (async () => {
   await load('');
+  try { ['bts.saved', 'bts.plot'].forEach(k => frame.contentWindow.localStorage.removeItem(k)); } catch (e) { /* storage blocked */ }
+  await load('');   // again, so the chart starts from its default view
   const w = frame.contentWindow, d = frame.contentDocument;
-  try { w.localStorage.removeItem('bts.saved'); } catch (e) { /* storage blocked */ }
+  row('Chart opens on Full zero', 'full pressed', d.querySelector('[data-plot="full"]').getAttribute('aria-pressed') === 'true' ? 'full pressed' : 'near pressed',
+      d.querySelector('[data-plot="full"]').getAttribute('aria-pressed') === 'true' && d.querySelector('[data-plot="near"]').getAttribute('aria-pressed') === 'false');
   const sel = id => d.getElementById(id).selectedOptions[0]?.textContent || '';
   const defaultHash = w.location.hash;
   try { w.localStorage.removeItem('bts.wind'); } catch (e) { /* storage blocked */ }
@@ -179,9 +182,9 @@ function set(d, id, value, ev = 'input') { const e = d.getElementById(id); e.val
     setup.querySelector('.fold-btn').click();
     row('Chevron inside a title toggles once', 'collapsed', setup.classList.contains('collapsed') ? 'collapsed' : 'open', setup.classList.contains('collapsed'));
     setup.querySelector('.fold-btn').click();
-    row('Near/Full buttons still work inside the chart header', 'full pressed, chart open', (d.querySelector('[data-plot="full"]').click(), d.querySelector('[data-plot="full"]').getAttribute('aria-pressed')) + (chart.classList.contains('collapsed') ? ', collapsed' : ', chart open'),
-        d.querySelector('[data-plot="full"]').getAttribute('aria-pressed') === 'true' && !chart.classList.contains('collapsed'));
-    d.querySelector('[data-plot="near"]').click();
+    row('Near/Full buttons still work inside the chart header', 'near pressed, chart open', (d.querySelector('[data-plot="near"]').click(), d.querySelector('[data-plot="near"]').getAttribute('aria-pressed')) + (chart.classList.contains('collapsed') ? ', collapsed' : ', chart open'),
+        d.querySelector('[data-plot="near"]').getAttribute('aria-pressed') === 'true' && !chart.classList.contains('collapsed'));
+    d.querySelector('[data-plot="full"]').click();   // back to the default, which the QR checks below expect
   }
 
   // Sight-in sheet renders.
