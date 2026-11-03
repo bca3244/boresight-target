@@ -861,6 +861,8 @@
 
   // Chart zoom: the chart card fills the window; Escape or the button restores it.
   function setChartMax(on) {
+    // Maximizing a collapsed chart opens it first.
+    if (on && el.chartCard.classList.contains('collapsed')) el.chartCard.querySelector('.fold-btn').click();
     el.chartCard.classList.toggle('maximized', on);
     document.body.classList.toggle('chart-open', on);
     el.chartZoom.setAttribute('aria-pressed', String(on));
@@ -870,6 +872,37 @@
   }
   el.chartZoom.addEventListener('click', () => setChartMax(!el.chartCard.classList.contains('maximized')));
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && el.chartCard.classList.contains('maximized')) setChartMax(false); });
+
+  // Collapsible cards: the first child is the header; everything after it is wrapped in a body that hides.
+  // Clicking the title or the chevron toggles it (other controls in the header keep working), and each card remembers its state.
+  document.querySelectorAll('[data-collapse]').forEach(card => {
+    const key = card.dataset.collapse, head = card.firstElementChild;
+    const body = document.createElement('div');
+    body.className = 'card-body';
+    while (head.nextSibling) body.appendChild(head.nextSibling);
+    card.appendChild(body);
+    head.classList.add('card-head');
+    const title = head.matches('h2') ? head : head.querySelector('h2');
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'fold-btn';
+    btn.innerHTML = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5"/></svg>';
+    btn.setAttribute('aria-label', 'Collapse ' + title.textContent.trim());
+    // Headers that already hold tools (the chart) get the chevron at the end of the tools.
+    (head.querySelector('.chart-tools') || head).appendChild(btn);
+    const set = (open, save) => {
+      card.classList.toggle('collapsed', !open);
+      btn.setAttribute('aria-expanded', String(open));
+      btn.setAttribute('aria-label', (open ? 'Collapse ' : 'Expand ') + title.textContent.trim());
+      if (save) savePref('fold.' + key, open ? 'open' : 'closed');
+      // A chart drawn while hidden has no size; redraw once it's visible again.
+      if (open && key === 'chart' && state.result && !state.result.error) drawChart();
+    };
+    btn.addEventListener('click', () => set(card.classList.contains('collapsed'), true));
+    title.classList.add('fold-title');
+    title.addEventListener('click', e => { if (!e.target.closest('.fold-btn')) btn.click(); });
+    set(loadPref('fold.' + key, 'open') !== 'closed', false);
+  });
 
   // Remember whether the how-to card is open.
   el.how.open = loadPref('how', 'open') === 'open';

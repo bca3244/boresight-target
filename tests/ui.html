@@ -85,6 +85,28 @@ function set(d, id, value, ev = 'input') { const e = d.getElementById(id); e.val
     row('Delete removes it', 'No saved setups yet', sel('saved-list'), sel('saved-list') === 'No saved setups yet');
   }
 
+  // Collapsible cards: chevron and title both toggle, the state is remembered, and the chart redraws on reopen.
+  {
+    const cards = Array.from(d.querySelectorAll('[data-collapse]'));
+    row('Every main card is collapsible', '5 cards with a chevron', cards.filter(c => c.querySelector('.fold-btn')).length + ' cards', cards.length === 5 && cards.every(c => c.querySelector('.fold-btn')));
+    const chart = d.querySelector('.chart-card');
+    chart.querySelector('.fold-btn').click();
+    const hidden = getComputedStyle(chart.querySelector('.card-body')).display === 'none';
+    row('Chevron collapses the chart', 'body hidden', hidden ? 'body hidden' : 'still visible', hidden && chart.classList.contains('collapsed'));
+    let remembered = null; try { remembered = w.localStorage.getItem('bts.fold.chart'); } catch (e) { remembered = 'n/a'; }
+    row('Collapsed state is remembered', 'closed', String(remembered), remembered === 'closed' || remembered === 'n/a');
+    chart.querySelector('h2').click();
+    const svg = chart.querySelector('#chart svg');
+    row('Clicking the title reopens and redraws', 'open with chart', !chart.classList.contains('collapsed') && svg ? 'open with chart' : 'not restored', !chart.classList.contains('collapsed') && !!svg && svg.getBoundingClientRect().width > 200);
+    const setup = d.querySelector('.setup');
+    setup.querySelector('.fold-btn').click();
+    row('Chevron inside a title toggles once', 'collapsed', setup.classList.contains('collapsed') ? 'collapsed' : 'open', setup.classList.contains('collapsed'));
+    setup.querySelector('.fold-btn').click();
+    row('Near/Full buttons still work inside the chart header', 'full pressed, chart open', (d.querySelector('[data-plot="full"]').click(), d.querySelector('[data-plot="full"]').getAttribute('aria-pressed')) + (chart.classList.contains('collapsed') ? ', collapsed' : ', chart open'),
+        d.querySelector('[data-plot="full"]').getAttribute('aria-pressed') === 'true' && !chart.classList.contains('collapsed'));
+    d.querySelector('[data-plot="near"]').click();
+  }
+
   // Sight-in sheet renders.
   await load('#preview-sightin');
   const sheet = frame.contentDocument.querySelector('#print-root svg');
