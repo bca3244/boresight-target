@@ -121,6 +121,15 @@
     return out;
   }
 
+  // Drift (in) in a steady full-value crosswind of windMph, from the time of flight to rangeYd:
+  // drift = wind x (t - x / v0), the lag rule that a point-mass model with a constant crosswind reduces to.
+  function windDriftIn(windMph, rangeYd, tSec, v0) { return windMph * 5280 / 3600 * (tSec - rangeYd * 3 / v0) * 12; }
+
+  // Angle that a height of offsetIn at rangeYd subtends, in MOA or mil.
+  function angleOf(offsetIn, rangeYd, unit) {
+    return offsetIn / ((unit === 'mil' ? INCHES_PER_MIL_AT_100YD : INCHES_PER_MOA_AT_100YD) * rangeYd / 100);
+  }
+
   // First range (yd) where the rising bullet crosses the sight line, or null if it never does before the zero.
   function nearZero(v0, bc, sightIn, angle, zeroYd) {
     const pts = trajectory(v0, bc, sightIn, angle, zeroYd, zeroYd / 2000);
@@ -275,7 +284,7 @@
   }
 
   window.BTS = {
-    roundHalfEven, solve, trajectory, trajectoryTable, nearZero, clicks, energyFtLb, laserOffset,
+    roundHalfEven, solve, trajectory, trajectoryTable, nearZero, clicks, energyFtLb, laserOffset, windDriftIn, angleOf,
     calibers, sightHeights, weights, v1Weights, shapes, typicalVelocityFps, typicalBc, zeroRanges, targetRanges,
     MODES, GAUGES, SLUGS, CM_PER_INCH, METERS_PER_YARD,
     ATMOSPHERE: { densityLbFt3: RHO, soundFps: SOUND }

@@ -14,7 +14,7 @@
     caliberSearch: $('caliber-search'), caliberCount: $('caliber-count'),
     savedCard: $('saved-card'), savedList: $('saved-list'), savedLoad: $('saved-load'), savedDelete: $('saved-delete'),
     savedName: $('saved-name'), savedSave: $('saved-save'), savedNote: $('saved-note'), savedCount: $('saved-count'),
-    trajTable: $('traj-table'), trajNote: $('traj-note'),
+    trajTable: $('traj-table'), trajNote: $('traj-note'), wind: $('wind'), windUnit: $('wind-unit'),
     cRange: $('c-range'), cClick: $('c-click'), cVert: $('c-vert'), cVdir: $('c-vdir'), cHoriz: $('c-horiz'), cHdir: $('c-hdir'),
     cElev: $('c-elev'), cElevSub: $('c-elev-sub'), cWind: $('c-wind'), cWindSub: $('c-wind-sub'),
     printSightin: $('print-sightin'), gridToggle: $('grid-toggle'),
@@ -33,6 +33,8 @@
   // Per-viewer preferences only; the page works the same without storage.
   function loadPref(key, fallback) { try { return localStorage.getItem('bts.' + key) || fallback; } catch (e) { return fallback; } }
   function savePref(key, value) { try { localStorage.setItem('bts.' + key, value); } catch (e) { /* storage unavailable */ } }
+  const WIND_DEFAULT_MPH = 10, KMH_PER_MPH = 1.609344;
+  function windPref() { const v = parseFloat(loadPref('wind', '')); return v >= 0 && v < 100 ? v : WIND_DEFAULT_MPH; }
 
   const state = {
     units: loadPref('units', 'english') === 'metric' ? 'metric' : 'english',
@@ -44,6 +46,7 @@
     typicalFps: 0,      // typical velocity before the barrel adjustment
     custom: false,      // true once the user edits velocity or B.C.
     barrel: null,       // { len, ref, rate } in inches and fps per inch; see resetBarrel()
+    windMph: windPref(), // crosswind for the drift columns, kept in mph whatever the units
     result: null
   };
   const metric = () => state.units === 'metric';
@@ -271,31 +274,60 @@
     const disp = Array.from(new Set(TABLE_RANGES[state.mode].concat(zero))).sort((a, b) => a - b);
     const toYd = d => (metric() ? d / BTS.METERS_PER_YARD : d);
     const grains = state.lists.weights[idx(el.weight)].grains;
-    return BTS.trajectoryTable(state.vFps, state.bc, sightIn, angle, disp.map(toYd)).map((p, i) => ({
-      range: disp[i],
-      zero: disp[i] === zero,
-      path: metric() ? p.y * BTS.CM_PER_INCH : p.y,
-      velocity: metric() ? p.v * 0.3048 : p.v,
-      energy: metric() ? BTS.energyFtLb(grains, p.v) * 1.35582 : BTS.energyFtLb(grains, p.v),
-      time: p.t
-    }));
+    return BTS.trajectoryTable(state.vFps, state.bc, sightIn, angle, disp.map(toYd)).map((p, i) => {
+      const rangeYd = toYd(disp[i]), driftIn = BTS.windDriftIn(state.windMph, rangeYd, p.t, state.vFps);
+      return {
+        range: disp[i],
+        zero: disp[i] === zero,
+        path: metric() ? p.y * BTS.CM_PER_INCH : p.y,
+        pathMoa: BTS.angleOf(p.y, rangeYd, 'moa'), pathMil: BTS.angleOf(p.y, rangeYd, 'mil'),
+        drift: metric() ? driftIn * BTS.CM_PER_INCH : driftIn,
+        driftMoa: BTS.angleOf(driftIn, rangeYd, 'moa'), driftMil: BTS.angleOf(driftIn, rangeYd, 'mil'),
+        velocity: metric() ? p.v * 0.3048 : p.v,
+        energy: metric() ? BTS.energyFtLb(grains, p.v) * 1.35582 : BTS.energyFtLb(grains, p.v),
+        time: p.t
+      };
+    });
   }
 
   function trajectoryUnits() {
-    return metric() ? { d: 'm', h: 'cm', v: 'm/s', e: 'J' } : { d: 'yd', h: 'in', v: 'fps', e: 'ft-lb' };
+    return metric() ? { d: 'm', h: 'cm', v: 'm/s', e: 'J', w: 'km/h' } : { d: 'yd', h: 'in', v: 'fps', e: 'ft-lb', w: 'mph' };
+  }
+
+  // Crosswind in the displayed unit, for labels and the input.
+  function windDisplay() {
+    const v = metric() ? state.windMph * KMH_PER_MPH : state.windMph;
+    return Math.round(v * 10) / 10;
+  }
+
+  // Shared by the page and the printed report: header cells and one row's cells (the first cell is the range).
+  const signed = (v, digits) => (Math.abs(v) < 0.5 * Math.pow(10, -digits) ? (0).toFixed(digits) : (v > 0 ? '+' : '−') + Math.abs(v).toFixed(digits));
+  function trajectoryHead(u) {
+    return `<tr><th></th><th class="grp sep" colspan="3">Bullet vs. sight line</th><th class="grp sep" colspan="3">Drift, ${windDisplay()} ${u.w} wind</th><th class="sep" colspan="3"></th></tr>` +
+      `<tr><th>Range (${u.d})</th><th class="sep">${u.h}</th><th>MOA</th><th>mil</th><th class="sep">${u.h}</th><th>MOA</th><th>mil</th>` +
+      `<th class="sep">Velocity (${u.v})</th><th>Energy (${u.e})</th><th>Time (s)</th></tr>`;
+  }
+  function trajectoryCells(row, pathClass) {
+    return `<td class="sep${pathClass}">${signed(row.path, 2)}</td><td>${signed(row.pathMoa, 1)}</td><td>${signed(row.pathMil, 2)}</td>` +
+      `<td class="sep">${row.drift.toFixed(2)}</td><td>${row.driftMoa.toFixed(1)}</td><td>${row.driftMil.toFixed(2)}</td>` +
+      `<td class="sep">${Math.round(row.velocity)}</td><td>${Math.round(row.energy)}</td><td>${row.time.toFixed(3)}</td>`;
   }
 
   function renderTable() {
     const r = state.result, u = trajectoryUnits();
-    const sign = v => (Math.abs(v) < 0.005 ? '0.00' : (v > 0 ? '+' : '−') + Math.abs(v).toFixed(2));
-    let h = `<thead><tr><th>Range (${u.d})</th><th>Bullet vs. sight line (${u.h})</th><th>Velocity (${u.v})</th><th>Energy (${u.e})</th><th>Time (s)</th></tr></thead><tbody>`;
+    let h = `<thead>${trajectoryHead(u)}</thead><tbody>`;
     r.table.forEach(row => {
-      h += `<tr${row.zero ? ' class="zero-row"' : ''}><td>${row.range}${row.zero ? ' <span class="tag">zero</span>' : ''}</td>` +
-        `<td class="${row.path > 0.005 ? 'up' : row.path < -0.005 ? 'down' : ''}">${sign(row.path)}</td>` +
-        `<td>${Math.round(row.velocity)}</td><td>${Math.round(row.energy)}</td><td>${row.time.toFixed(3)}</td></tr>`;
+      const cls = row.path > 0.005 ? ' up' : row.path < -0.005 ? ' down' : '';
+      h += `<tr${row.zero ? ' class="zero-row"' : ''}><td>${row.range}${row.zero ? ' <span class="tag">zero</span>' : ''}</td>${trajectoryCells(row, cls)}</tr>`;
     });
     el.trajTable.innerHTML = h + '</tbody>';
     el.trajNote.textContent = (r.nearZero != null ? `Near zero ${r.nearZero.toFixed(1)} ${u.d} · ` : '') + `Max rise ${riseText(r.rise)}`;
+  }
+
+  // Shows the crosswind in the current units (the stored value stays in mph).
+  function showWind() {
+    el.windUnit.textContent = trajectoryUnits().w;
+    if (document.activeElement !== el.wind) el.wind.value = String(windDisplay());
   }
 
   // ---------- Click calculator ----------
@@ -374,6 +406,7 @@
     el.meet.textContent = r.meet.toFixed(1);
     el.meetUnit.textContent = metric() ? 'm' : 'yd';
     el.maxRise.textContent = 'Max rise ' + riseText(r.rise);
+    showWind();
     renderTable();
     renderTarget();
   }
@@ -645,6 +678,10 @@
     s += `<circle cx="${cx}" cy="${laserY}" r="${R}" fill="#fff" stroke="#000" stroke-width="0.13"/>`;
     s += `<circle cx="${cx}" cy="${laserY}" r="0.075" fill="none" stroke="#000" stroke-width="0.035"/>`;
     s += `<text x="${cx}" y="${laserY - 0.13}" text-anchor="middle" font-size="0.085" font-weight="700" letter-spacing="0.01">LASER</text>`;
+    // QR code to reopen this setup, in the empty lower-left corner above the footer.
+    const qs = 1.0, qy = fy - 0.45 - qs;
+    s += qrCode(0.45, qy, qs);
+    s += `<text x="${0.45 + qs + 0.05}" y="${qy + qs / 2 - 0.04}" font-size="0.1" fill="#555">Scan to open</text><text x="${0.45 + qs + 0.05}" y="${qy + qs / 2 + 0.1}" font-size="0.1" fill="#555">this setup</text>`;
     // Footer: placement line across the page, then instructions and scale check (left) and settings (right).
     s += `<line x1="0.5" y1="${fy - 0.3}" x2="${W - 0.5}" y2="${fy - 0.3}" stroke="#bbb" stroke-width="0.01"/>`;
     s += `<text x="${W / 2}" y="${fy}" text-anchor="middle" font-size="0.2" font-weight="700">Place this target ${range} ${unitD} from the muzzle.</text>`;
@@ -660,6 +697,33 @@
     });
     s += `</svg>`;
     return `<div class="sheet">${s}</div>`;
+  }
+
+  // Link to this exact setup for the QR codes. Opened from disk, the code points at the published site instead.
+  const PUBLIC_URL = 'https://bca3244.github.io/boresight-target/';
+  function setupUrl() {
+    const base = /^https?:$/.test(location.protocol) ? location.origin + location.pathname.replace(/index\.html$/, '') : PUBLIC_URL;
+    return base + '#' + shareCode();
+  }
+
+  // QR code of setupUrl() as SVG elements: a white square of side `size` at (x, y), quiet zone included.
+  function qrCode(x, y, size) {
+    const q = qrcode(0, 'M');
+    q.addData(setupUrl());
+    q.make();
+    const n = q.getModuleCount(), quiet = 4, m = size / (n + 2 * quiet);
+    let d = '';
+    for (let row = 0; row < n; row++) {
+      // One rectangle per run of dark modules keeps the path short.
+      for (let c = 0; c < n; c++) {
+        if (!q.isDark(row, c)) continue;
+        let run = 1;
+        while (c + run < n && q.isDark(row, c + run)) run++;
+        d += `M${(x + (c + quiet) * m).toFixed(4)} ${(y + (row + quiet) * m).toFixed(4)}h${(run * m).toFixed(4)}v${m.toFixed(4)}h-${(run * m).toFixed(4)}z`;
+        c += run - 1;
+      }
+    }
+    return `<rect class="qr" x="${x}" y="${y}" width="${size}" height="${size}" fill="#fff"/><path d="${d}" fill="#000" shape-rendering="crispEdges"/>`;
   }
 
   // Grid lines every `step` inches through (cx, cy), clipped to the box x0..x1, y0..y1. Inches are the SVG unit.
@@ -692,6 +756,7 @@
     s += `<rect width="${W}" height="${H}" fill="#fff"/>`;
     s += `<text x="${W / 2}" y="0.62" text-anchor="middle" font-size="0.22" font-weight="700">Sight-in target · shoot from ${r.zero} ${unitD}</text>`;
     s += `<text x="${W / 2}" y="0.9" text-anchor="middle" font-size="0.12" fill="#555">${esc(BTS.calibers(state.mode)[idx(el.caliber)])} · squares are 1 ${unitL}</text>`;
+    s += qrCode(x1 - 0.82, 0.22, 0.82);   // top-right corner, clear of the title and the square counts
     s += gridLines(cx, cy, step, x0, y0, x1, y1, '#b9c1cb', 0.012);
     // Every 5th line and the center lines darker, so squares are easy to count.
     s += gridLines(cx, cy, step * 5, x0, y0, x1, y1, '#6e7a88', 0.02);
@@ -727,20 +792,20 @@
     const light = { grid: '#d9dee5', axis: '#5f6b7a', tick: '#444', title: '#222', los: '#1f6fe5', path: '#b07d0b', laser: '#e0283d', accent: '#0f9d8a', bg: '#fff' };
     // The report always shows the full zero range so the maximum rise is on the chart.
     const saved = state.plot; state.plot = 'full';
-    const chart = chartSVG(chartData(), 680, 230, light, false).svg;
+    const chart = chartSVG(chartData(), 680, 185, light, false).svg;
     state.plot = saved;
     // Settings in two side-by-side tables to leave room for the trajectory table.
     const all = settingsRows().concat(r.nearZero != null ? [['Near zero', r.nearZero.toFixed(1) + ' ' + u.d]] : []);
     const half = Math.ceil(all.length / 2);
     const tbl = list => `<table>${list.map(rw => `<tr><th>${esc(rw[0])}</th><td>${esc(rw[1])}</td></tr>`).join('')}</table>`;
     const rows = `<div class="report-cols">${tbl(all.slice(0, half))}${tbl(all.slice(half))}</div>`;
-    const sign = v => (Math.abs(v) < 0.005 ? '0.00' : (v > 0 ? '+' : '−') + Math.abs(v).toFixed(2));
-    const traj = `<table class="report-traj"><tr><th>Range (${u.d})</th><th>Bullet vs. sight line (${u.h})</th><th>Velocity (${u.v})</th><th>Energy (${u.e})</th><th>Time (s)</th></tr>` +
-      r.table.map(row => `<tr${row.zero ? ' class="zero-row"' : ''}><td>${row.range}${row.zero ? ' (zero)' : ''}</td><td>${sign(row.path)}</td><td>${Math.round(row.velocity)}</td><td>${Math.round(row.energy)}</td><td>${row.time.toFixed(3)}</td></tr>`).join('') + '</table>';
+    const traj = `<table class="report-traj">${trajectoryHead(u)}` +
+      r.table.map(row => `<tr${row.zero ? ' class="zero-row"' : ''}><td>${row.range}${row.zero ? ' (zero)' : ''}</td>${trajectoryCells(row, '')}</tr>`).join('') + '</table>';
     const unitD = u.d;
     return `<div class="sheet report" style="width:${paper.w}in;height:${paper.h}in">
       <header><svg viewBox="0 0 32 32" width="34" height="34"><circle cx="16" cy="16" r="11" fill="none" stroke="#0f9d8a" stroke-width="2.5"/><path d="M16 1v8M16 23v8M1 16h8M23 16h8" stroke="#0f9d8a" stroke-width="2.5"/><circle cx="16" cy="16" r="3" fill="#e0283d"/></svg>
-      <div><h1>Boresight Report</h1><p>${esc(BTS.calibers(state.mode)[idx(el.caliber)])} · zeroed at ${r.zero} ${unitD}</p></div></header>
+      <div><h1>Boresight Report</h1><p>${esc(BTS.calibers(state.mode)[idx(el.caliber)])} · zeroed at ${r.zero} ${unitD}</p></div>
+      <div class="report-qr"><span>Scan to open<br>this setup</span><svg viewBox="0 0 1 1" width="0.8in" height="0.8in">${qrCode(0, 0, 1)}</svg></div></header>
       <p class="report-meet">Line of sight and laser beam meet at <strong>${r.meet.toFixed(1)} ${unitD}</strong></p>
       <div class="report-chart">${chart}</div>
       <p class="report-legend"><span style="color:#1f6fe5">━ Line of sight</span><span style="color:#b07d0b">━ Bullet path</span><span style="color:#e0283d">━ Laser beam</span></p>
@@ -814,6 +879,17 @@
     if (keepLoad) { state.vFps = keepLoad.v; state.bc = keepLoad.bc; state.custom = true; showLoad(); } else setTypicalLoad();
     render();
   }
+
+  // Crosswind for the drift columns: a per-viewer preference, not part of the link. Blank means no wind.
+  el.wind.addEventListener('input', () => {
+    const v = el.wind.value === '' ? 0 : parseFloat(el.wind.value);
+    if (!(v >= 0 && v < 1000)) return;
+    state.windMph = metric() ? v / KMH_PER_MPH : v;
+    savePref('wind', String(state.windMph));
+    const r = state.result;
+    if (r && !r.error) { r.table = trajectoryRows(r.angle, r.sightIn, r.zero, r.zeroYd); renderTable(); }
+  });
+  el.wind.addEventListener('blur', showWind);
 
   el.barrelOn.addEventListener('change', () => {
     state.barrel.on = el.barrelOn.checked;

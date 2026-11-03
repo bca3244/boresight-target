@@ -115,6 +115,18 @@ row('Sight cutoff: 1.5 in starts at 8', 8, BTS.targetRanges(1.5, 44.9)[0], BTS.t
   row('Clicks: 2.5 in at 100 yd, 0.1 mil', '7 clicks (0.69 mil)', `${c2.clicks} clicks (${c2.angle.toFixed(2)} mil)`, c2.clicks === 7 && c2.angle.toFixed(2) === '0.69');
   const e = Math.round(BTS.energyFtLb(150, 2800));
   row('Energy: 150 gr at 2800 fps', '2611 ft-lb', e + ' ft-lb', e === 2611);
+
+  // Wind drift (lag rule) and MOA / mil angles.
+  const t3 = BTS.trajectoryTable(2790, 0.370, 1.5, BTS.solve(2790, 0.370, 1.5, 100).angle, [100, 300]);
+  const d100 = BTS.windDriftIn(10, 100, t3[0].t, 2790), d300 = BTS.windDriftIn(10, 300, t3[1].t, 2790);
+  row('Drift: 308 150 gr, 10 mph at 300 yd', '7 to 10 in', d300.toFixed(2) + ' in', d300 > 7 && d300 < 10);
+  row('Drift grows with range', '100 yd < 300 yd', `${d100.toFixed(2)} < ${d300.toFixed(2)}`, d100 > 0 && d100 < d300);
+  row('Drift is proportional to wind', '20 mph = 2 × 10 mph', (BTS.windDriftIn(20, 300, t3[1].t, 2790) / d300).toFixed(4), Math.abs(BTS.windDriftIn(20, 300, t3[1].t, 2790) / d300 - 2) < 1e-9);
+  row('No wind, no drift', '0', String(BTS.windDriftIn(0, 300, t3[1].t, 2790)), BTS.windDriftIn(0, 300, t3[1].t, 2790) === 0);
+  const t4 = BTS.trajectoryTable(2790, 0.200, 1.5, BTS.solve(2790, 0.200, 1.5, 100).angle, [300]);
+  row('Lower B.C. drifts more', '> ' + d300.toFixed(2), BTS.windDriftIn(10, 300, t4[0].t, 2790).toFixed(2), BTS.windDriftIn(10, 300, t4[0].t, 2790) > d300);
+  row('1.0472 in at 100 yd is 1 MOA', '1.000', BTS.angleOf(1.0472, 100, 'moa').toFixed(3), BTS.angleOf(1.0472, 100, 'moa').toFixed(3) === '1.000');
+  row('7.2 in at 200 yd is 1 mil', '1.000', BTS.angleOf(7.2, 200, 'mil').toFixed(3), BTS.angleOf(7.2, 200, 'mil').toFixed(3) === '1.000');
 }
 
 // Every caliber, both unit systems: lists are non-empty, values are finite, and a default solve works.

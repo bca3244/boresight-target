@@ -224,6 +224,13 @@
           <h2>Trajectory</h2>
           <p class="muted" id="traj-note"></p>
         </div>
+        <div class="traj-tools">
+          <label class="mini wind-field">
+            <span>Crosswind</span>
+            <span class="input-unit"><input id="wind" type="number" inputmode="decimal" min="0" max="99" step="1"><span id="wind-unit">mph</span></span>
+          </label>
+          <p class="hint">Drift is for a full-value wind (straight across, from 3 or 9 o'clock) and is with the wind. MOA and mil are from the line of sight.</p>
+        </div>
         <div class="table-wrap"><table class="data" id="traj-table"></table></div>
       </div>
 
@@ -278,6 +285,7 @@
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 <div id="print-root" aria-hidden="true"></div>
 
+<script src="js/vendor/qrcode.js"></script>
 <script src="js/data.js"></script>
 <script src="js/ballistics.js"></script>
 <script src="js/app.js"></script>
