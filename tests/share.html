@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Share link tests</title>
+<style>
+  body { font: 14px/1.4 system-ui, sans-serif; background: #111; color: #ddd; padding: 16px; }
+  td, th { padding: 2px 10px; text-align: left; }
+  .pass { color: #6c6; } .fail { color: #f66; font-weight: bold; }
+  iframe { width: 1200px; height: 900px; border: 0; position: absolute; left: -5000px; }
+</style>
+</head>
+<body>
+<h1>Share link tests</h1>
+<p id="summary">running…</p>
+<table id="results"><tr><th>#</th><th>Check</th><th>Expected</th><th>Got</th><th>Result</th></tr></table>
+<iframe id="f"></iframe>
+<script>
+const table = document.getElementById('results');
+let pass = 0, fail = 0, n = 0;
+function row(name, expected, got, ok) {
+  ok ? pass++ : fail++;
+  const tr = table.insertRow();
+  [++n, name, expected, got, ok ? 'PASS' : 'FAIL'].forEach((v, i) => { const td = tr.insertCell(); td.textContent = v; if (i === 4) td.className = ok ? 'pass' : 'fail'; });
+}
+const frame = document.getElementById('f');
+const load = hash => new Promise(res => { frame.onload = () => setTimeout(res, 50); frame.src = '../index.html?t=' + Math.random() + hash; });
+
+// Builds a share code from labels using the page's own lists, so the test does not hard-code list positions.
+function code(w, c) {
+  const B = w.BTS, b36 = (v, l) => Math.round(v).toString(36).padStart(l, '0');
+  const metric = !!c.metric, mode = c.mode;
+  const ci = B.calibers(mode).indexOf(c.caliber);
+  const si = B.sightHeights(mode, metric).findIndex(s => Math.abs(s.value - c.sight) < 1e-9);
+  const ws = B.weights(mode, ci, metric);
+  if (c.weight === 'middle') c.weight = ws[Math.floor(ws.length / 2)].label;
+  const wi = ws.findIndex(x => x.label === c.weight);
+  const hi = B.shapes(mode, ci).findIndex(s => s.label === c.shape);
+  const zi = B.zeroRanges(mode).indexOf(c.zero);
+  const flags = B.MODES.indexOf(mode) * 8 + (metric ? 4 : 0) + (c.a4 ? 2 : 0) + (c.full ? 1 : 0);
+  let s = '#1' + flags.toString(36) + b36(ci, 2) + b36(si, 2) + b36(wi, 2) + b36(hi, 1) + b36(zi, 1) + b36(c.target || 0, 2);
+  if (c.v) s += b36(c.v, 3) + b36(c.bc * 1000, 3);
+  return s;
+}
+
+const CASES = [
+  { name: '223 Rem 55 Pointed, 1.5 in, 100 yd', mode: 'rifle', caliber: '223 Rem (5.56x45mm)', sight: 1.5, weight: '55 gr', shape: 'Pointed', zero: 100, meet: '44.9' },
+  { name: '9mm 124 RN, 0.9 in, 50 yd (pistol)', mode: 'pistol', caliber: '9mm Luger (9x19mm)', sight: 0.9, weight: '124 gr', shape: 'Round Nose', zero: 50, meet: '9.9' },
+  { name: '12 ga Sabot 1 oz, 0.5 in, 100 yd (shotgun)', mode: 'shotgun', caliber: '12 gauge slug barrel', sight: 0.5, weight: '1.000 oz', shape: 'Sabot Slug', zero: 100, meet: '4.6' },
+  { name: '300 WM 180, target 22 yd', mode: 'rifle', caliber: '300 Winchester Mag', sight: 1.5, weight: '180 gr', shape: 'Pointed', zero: 150, meet: '36.8', targetValue: 22, offset: '0.60 in' },
+  { name: 'Own load 3215 fps / 0.239 (223)', mode: 'rifle', caliber: '223 Rem (5.56x45mm)', sight: 1.5, weight: '60 gr', shape: 'Boat-Tail', zero: 100, v: 3215, bc: 0.239, meet: '44.9', custom: true },
+  { name: 'Metric, A4, full chart (308)', mode: 'rifle', caliber: '308 Win (7.62x51mm)', sight: 3.8, weight: 'middle', shape: 'Pointed', zero: 100, metric: true, a4: true, full: true },
+  { name: 'Refused zero still round-trips', mode: 'pistol', caliber: '9mm Luger (9x19mm)', sight: 0.9, weight: '124 gr', shape: 'Round Nose', zero: 25, error: true }
+];
+
+(async () => {
+  await load('');
+  const defaultHash = frame.contentWindow.location.hash;
+  row('Default page writes a settings code', 'code like #1 + 11 characters', defaultHash, /^#1[0-9a-z]{11}$/.test(defaultHash));
+
+  for (const c of CASES) {
+    await load('');
+    const w = frame.contentWindow;
+    if (c.targetValue) {
+      // Target ranges depend on the result, so find the position after a first load with the meet distance.
+      await load(code(w, c));
+      const t = Array.from(frame.contentDocument.getElementById('target').options).findIndex(o => o.textContent === c.targetValue + ' yd');
+      c.target = t;
+    }
+    const want = code(frame.contentWindow, c);
+    await load(want);
+    const d = frame.contentDocument, sel = id => d.getElementById(id).selectedOptions[0]?.textContent || '';
+    const got = frame.contentWindow.location.hash;
+    row(c.name + ': link unchanged after load', want, got, got === want);
+    row(c.name + ': caliber', c.caliber, sel('caliber'), sel('caliber') === c.caliber);
+    row(c.name + ': weight / shape', c.weight + ' / ' + c.shape, sel('weight') + ' / ' + sel('shape'), sel('weight') === c.weight && sel('shape') === c.shape);
+    if (c.meet) row(c.name + ': meet distance', c.meet, d.getElementById('meet').textContent, d.getElementById('meet').textContent === c.meet);
+    if (c.offset) { const o = d.getElementById('offset').textContent; row(c.name + ': laser spot', c.offset, o, o.startsWith(c.offset)); }
+    if (c.custom) row(c.name + ': own load kept', '3215 / 0.239', d.getElementById('velocity').value + ' / ' + d.getElementById('bc').value, d.getElementById('velocity').value === '3215' && d.getElementById('bc').value === '0.239');
+    if (c.metric) {
+      const on = d.querySelector('[data-units="metric"]').getAttribute('aria-pressed') === 'true' && d.getElementById('paper').value === 'a4' &&
+        d.querySelector('[data-plot="full"]').getAttribute('aria-pressed') === 'true';
+      row(c.name + ': units, paper and chart view', 'metric, a4, full', on ? 'metric, a4, full' : 'not restored', on);
+    }
+    if (c.error) row(c.name + ': shows the error', 'error shown', d.getElementById('error').hidden ? 'no error' : 'error shown', !d.getElementById('error').hidden);
+  }
+
+  await load('#1zzzzzzzzzzzz');
+  row('Garbage code falls back to defaults', '308 Win (7.62x51mm)', frame.contentDocument.getElementById('caliber').selectedOptions[0].textContent,
+      frame.contentDocument.getElementById('caliber').selectedOptions[0].textContent === '308 Win (7.62x51mm)');
+
+  document.getElementById('summary').textContent = `${pass} passed, ${fail} failed`;
+  document.title = `SHARE ${pass} passed ${fail} failed`;
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Engine tests</title>
+<style>
+  body { font: 14px/1.4 system-ui, sans-serif; background: #111; color: #ddd; padding: 16px; }
+  td, th { padding: 2px 10px; text-align: left; }
+  .pass { color: #6c6; } .fail { color: #f66; font-weight: bold; }
+</style>
+</head>
+<body>
+<h1>Engine tests against reference readings</h1>
+<p id="summary"></p>
+<table id="results"><tr><th>#</th><th>Case</th><th>Expected</th><th>Got</th><th>Result</th></tr></table>
+<script src="../js/data.js"></script>
+<script src="../js/ballistics.js"></script>
+<script>
+// Reference readings (English units).
+const CASES = [
+  ['rifle', '223 Rem (5.56x45mm)', 55, 'Pointed', 1.5, 100, 3215, 0.239, 44.9, { 10: -1.17, 25: -0.66 }],
+  ['rifle', '223 Rem (5.56x45mm)', 55, 'Pointed', 1.5, 200, 3215, 0.239, 31.2],
+  ['rifle', '243 Win (6.16x51mm)', 100, 'Pointed', 1.5, 100, 3109, 0.386, 44.1],
+  ['rifle', '308 Win (7.62x51mm)', 149, 'Pointed', 2.0, 100, 2796, 0.367, 45.8],
+  ['rifle', '308 Win (7.62x51mm)', 149, 'Pointed', 2.0, 200, 2796, 0.367, 33.1, { 10: -1.40 }],
+  ['rifle', '30-30 Winchester', 150, 'Flat Point', 1.5, 100, 2346, 0.219, 29.8],
+  ['rifle', '6.5mm Creedmoor', 140, 'Boat-Tail', 2.0, 100, 2776, 0.572, 46.0],
+  ['rifle', '6.5mm Creedmoor', 140, 'Boat-Tail', 2.0, 200, 2776, 0.572, 34.0],
+  ['rifle', '300 Winchester Mag', 180, 'Pointed', 1.5, 150, 3018, 0.456, 36.8, { 22: -0.60 }],
+  ['pistol', '9mm Luger (9x19mm)', 124, 'Round Nose', 0.9, 50, 1124, 0.152, 9.9, { 5: -0.44 }],
+  ['pistol', '9mm Luger (9x19mm)', 124, 'Round Nose', 0.9, 25, 1124, 0.152, 'error'],
+  ['shotgun', '12 gauge slug barrel', 1.0, 'Sabot Slug', 0.5, 100, 1400, 0.181, 4.6],
+  ['shotgun', '20 gauge slug barrel', 0.625, 'Slug (full bore size)', 0.5, 50, 1680, 0.082, 10.7],
+  ['rifle', '17 HMR', 17, 'Pointed', 0.9, 100, 2540, 0.148, 22.1],
+  ['rifle', '17 HMR', 17, 'Pointed', 0.9, 200, 2540, 0.148, 11.0],
+  ['rifle', '17 HMR', 17, 'Pointed', 0.9, 300, 2540, 0.148, 6.1],
+  ['rifle', '17 HMR', 17, 'Pointed', 3.0, 75, 2540, 0.148, 'error'],
+  ['pistol', '9mm Luger (9x19mm)', 124, 'Round Nose', 0.4, 25, 1124, 0.152, 7.8],
+  ['pistol', '9mm Luger (9x19mm)', 124, 'Round Nose', 0.8, 25, 1124, 0.152, 11.9],
+  ['pistol', '9mm Luger (9x19mm)', 110, 'Round Nose', 0.8, 25, 1166, 0.135, 'error'],
+  ['pistol', '9mm Luger (9x19mm)', 116, 'Round Nose', 0.8, 25, 1148, 0.142, 12.1]
+];
+
+// Weight-list checks: [mode, caliber, first, step, last] of the version-1 lists.
+const LISTS = [
+  ['rifle', '223 Rem (5.56x45mm)', 28, 1, 92], ['rifle', '30-30 Winchester', 44, 2, 204],
+  ['rifle', '300 Winchester Mag', 104, 4, 264], ['rifle', '17 HMR', 13, 1, null],
+  ['rifle', '243 Win (6.16x51mm)', 44, 2, null], ['rifle', '308 Win (7.62x51mm)', 44, 3, null],
+  ['rifle', '6.5mm Creedmoor', 76, 2, null], ['pistol', '9mm Luger (9x19mm)', 70, 2, null]
+];
+
+const table = document.getElementById('results');
+let pass = 0, fail = 0, n = 0;
+function row(name, expected, got, ok) {
+  ok ? pass++ : fail++;
+  const tr = table.insertRow();
+  [++n, name, expected, got, ok ? 'PASS' : 'FAIL'].forEach((v, i) => { const td = tr.insertCell(); td.textContent = v; if (i === 4) td.className = ok ? 'pass' : 'fail'; });
+}
+
+CASES.forEach(([mode, cal, wt, shape, sight, zero, vExp, bcExp, meetExp, offsets]) => {
+  const ci = BTS.calibers(mode).indexOf(cal);
+  const weight = BTS.weights(mode, ci, false).find(w => Math.abs((mode === 'shotgun' ? w.ounces : w.grains) - wt) < 1e-9);
+  const shapeObj = BTS.shapes(mode, ci).find(s => s.label === shape);
+  const tag = `${cal} ${wt} ${shape} ${sight}" @ ${zero}`;
+  if (ci < 0 || !weight || !shapeObj) { row(tag, 'caliber/weight/shape in lists', 'missing', false); return; }
+  const v = BTS.typicalVelocityFps(mode, ci, weight);
+  const bc = BTS.typicalBc(mode, ci, weight, shapeObj.index);
+  row(tag + ' velocity', vExp, v, v === vExp);
+  row(tag + ' B.C.', bcExp.toFixed(3), bc.toFixed(3), bc.toFixed(3) === bcExp.toFixed(3));
+  const sol = BTS.solve(v, bc, sight, zero);
+  if (meetExp === 'error') { row(tag + ' zero refused', 'error', sol.rising ? 'error' : sol.meetYd.toFixed(2), sol.rising); return; }
+  row(tag + ' meet', meetExp.toFixed(1), sol.meetYd.toFixed(2) + (sol.rising ? ' (refused)' : ''), !sol.rising && sol.meetYd.toFixed(1) === meetExp.toFixed(1));
+  for (const r in offsets || {}) {
+    const off = BTS.laserOffset(sight, sol.meetYd, Number(r));
+    row(tag + ' laser at ' + r + ' yd', offsets[r].toFixed(2), off.toFixed(2), off.toFixed(2) === offsets[r].toFixed(2));
+  }
+});
+
+LISTS.forEach(([mode, cal, first, step, last]) => {
+  const list = BTS.weights(mode, BTS.calibers(mode).indexOf(cal), false).map(w => w.grains);
+  const got = `${list[0]}, step ${list[1] - list[0]}, last ${list[list.length - 1]}`;
+  row(cal + ' weight list', `${first}, step ${step}` + (last ? `, last ${last}` : ''), got,
+      list[0] === first && list[1] - list[0] === step && (last === null || list[list.length - 1] === last));
+});
+
+row('Sight cutoff: 0.9 in starts at 1', 1, BTS.targetRanges(0.9, 22.1)[0], BTS.targetRanges(0.9, 22.1)[0] === 1);
+row('Sight cutoff: 1.5 in starts at 8', 8, BTS.targetRanges(1.5, 44.9)[0], BTS.targetRanges(1.5, 44.9)[0] === 8);
+
+// Every caliber, both unit systems: lists are non-empty, values are finite, and a default solve works.
+['rifle', 'pistol', 'shotgun'].forEach(mode => {
+  let bad = [];
+  BTS.calibers(mode).forEach((cal, ci) => {
+    [false, true].forEach(metric => {
+      const ws = BTS.weights(mode, ci, metric), ss = BTS.shapes(mode, ci), sights = BTS.sightHeights(mode, metric);
+      if (!ws.length || !ss.length || !sights.length || ws.some(w => !(w.grains > 0))) { bad.push(cal + (metric ? ' (metric)' : '') + ': empty list'); return; }
+      if (metric && mode !== 'shotgun' && ws.length < 11) bad.push(cal + ': fewer than 11 metric weights');
+      const w = ws[Math.floor(ws.length / 2)];
+      const v = BTS.typicalVelocityFps(mode, ci, w), bc = BTS.typicalBc(mode, ci, w, ss[0].index);
+      if (!(v > 0 && bc > 0)) { bad.push(cal + ': velocity ' + v + ', B.C. ' + bc); return; }
+      const zero = BTS.zeroRanges(mode).slice(-1)[0];
+      const sol = BTS.solve(v, bc, 1.5, zero);
+      if (!isFinite(sol.meetYd)) bad.push(cal + ': solve failed');
+    });
+  });
+  row(`All ${mode} calibers build lists and solve`, 'no problems', bad.length ? bad.slice(0, 3).join('; ') + (bad.length > 3 ? ' …' : '') : 'no problems', bad.length === 0);
+});
+
+document.getElementById('summary').textContent = `${pass} passed, ${fail} failed`;
+document.title = `TESTS ${pass} passed ${fail} failed`;
+</script>
+</body>
+</html>
