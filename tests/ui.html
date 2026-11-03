@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>UI tests</title>
+<style>
+  body { font: 14px/1.4 system-ui, sans-serif; background: #111; color: #ddd; padding: 16px; }
+  td, th { padding: 2px 10px; text-align: left; }
+  .pass { color: #6c6; } .fail { color: #f66; font-weight: bold; }
+  iframe { width: 1300px; height: 1000px; border: 0; position: absolute; left: -5000px; }
+</style>
+</head>
+<body>
+<h1>UI tests: caliber search, my setups, click calculator, trajectory table</h1>
+<p id="summary">running…</p>
+<table id="results"><tr><th>#</th><th>Check</th><th>Expected</th><th>Got</th><th>Result</th></tr></table>
+<iframe id="f"></iframe>
+<script>
+const table = document.getElementById('results');
+let pass = 0, fail = 0, n = 0;
+function row(name, expected, got, ok) {
+  ok ? pass++ : fail++;
+  const tr = table.insertRow();
+  [++n, name, expected, got, ok ? 'PASS' : 'FAIL'].forEach((v, i) => { const td = tr.insertCell(); td.textContent = v; if (i === 4) td.className = ok ? 'pass' : 'fail'; });
+}
+const frame = document.getElementById('f');
+const load = hash => new Promise(res => { frame.onload = () => setTimeout(res, 50); frame.src = '../index.html?t=' + Math.random() + hash; });
+const wait = ms => new Promise(r => setTimeout(r, ms));
+function set(d, id, value, ev = 'input') { const e = d.getElementById(id); e.value = value; e.dispatchEvent(new Event(ev, { bubbles: true })); }
+
+(async () => {
+  await load('');
+  const w = frame.contentWindow, d = frame.contentDocument;
+  try { w.localStorage.removeItem('bts.saved'); } catch (e) { /* storage blocked */ }
+  const sel = id => d.getElementById(id).selectedOptions[0]?.textContent || '';
+
+  // Caliber search.
+  set(d, 'caliber-search', '350 leg');
+  row('Search "350 leg" selects 350 Legend', '350 Legend', sel('caliber'), sel('caliber') === '350 Legend');
+  row('Search narrows the list', '1 option', d.getElementById('caliber').options.length + ' options', d.getElementById('caliber').options.length === 1);
+  row('Search updates the weight list', 'includes 170 gr', Array.from(d.getElementById('weight').options).some(o => o.textContent === '170 gr') ? 'includes 170 gr' : 'missing', Array.from(d.getElementById('weight').options).some(o => o.textContent === '170 gr'));
+  set(d, 'caliber-search', 'zzzz');
+  row('No match keeps the current caliber', '350 Legend', sel('caliber'), sel('caliber') === '350 Legend' && /No calibers match/.test(d.getElementById('caliber-count').textContent));
+  set(d, 'caliber-search', '6.5 creed');
+  row('Multi-word search', '6.5mm Creedmoor', sel('caliber'), sel('caliber') === '6.5mm Creedmoor');
+  set(d, 'caliber-search', '');
+  row('Clearing shows all calibers again', '189', String(d.getElementById('caliber').options.length), d.getElementById('caliber').options.length === 189);
+
+  // Trajectory table.
+  const rows = d.querySelectorAll('#traj-table tbody tr');
+  row('Trajectory table has rows', '7 rows (100 yd is the zero)', rows.length + ' rows', rows.length === 7);
+  const zeroRow = d.querySelector('#traj-table tr.zero-row td:nth-child(2)');
+  row('Bullet is on the sight line at the zero', '0.00', zeroRow && zeroRow.textContent, zeroRow && zeroRow.textContent === '0.00');
+
+  // Click calculator: 2.5 in low and 1 in left at 100 yd, 1/4 MOA clicks.
+  set(d, 'c-click', 'moa:0.25', 'change');
+  set(d, 'c-vert', '2.5'); set(d, 'c-vdir', 'low'); set(d, 'c-horiz', '1'); set(d, 'c-hdir', 'left');
+  const elev = d.getElementById('c-elev').textContent, wind = d.getElementById('c-wind').textContent;
+  row('Elevation for 2.5 in low', '10 clicks UP', elev, elev === '10 clicks UP');
+  row('Windage for 1 in left', '4 clicks RIGHT', wind, wind === '4 clicks RIGHT');
+  set(d, 'c-click', 'mil:0.1', 'change');
+  row('Elevation in 0.1 mil clicks', '7 clicks UP', d.getElementById('c-elev').textContent, d.getElementById('c-elev').textContent === '7 clicks UP');
+  set(d, 'c-vdir', 'high');
+  row('Group high means dial down', '7 clicks DOWN', d.getElementById('c-elev').textContent, d.getElementById('c-elev').textContent === '7 clicks DOWN');
+  set(d, 'c-range', '200');
+  row('Farther shot needs fewer clicks', '3 clicks DOWN', d.getElementById('c-elev').textContent, d.getElementById('c-elev').textContent === '3 clicks DOWN');
+
+  // My setups: save, change something, open the saved one again, delete.
+  let storageOk = true;
+  try { w.localStorage.setItem('bts.test', '1'); w.localStorage.removeItem('bts.test'); } catch (e) { storageOk = false; }
+  if (!storageOk) {
+    row('My setups disabled without storage', 'Save disabled', d.getElementById('saved-save').disabled ? 'Save disabled' : 'enabled', d.getElementById('saved-save').disabled);
+  } else {
+    const codeBefore = w.location.hash, calBefore = sel('caliber');
+    set(d, 'saved-name', 'Test rifle');
+    d.getElementById('saved-save').click();
+    row('Saved setup appears in the list', 'Test rifle', sel('saved-list'), sel('saved-list') === 'Test rifle');
+    row('Count badge shows 1', '1', d.getElementById('saved-count').textContent, d.getElementById('saved-count').textContent === '1');
+    d.querySelector('[data-mode="pistol"]').click();
+    row('Switched away to pistol', '9mm Luger (9x19mm)', sel('caliber'), sel('caliber') === '9mm Luger (9x19mm)');
+    d.getElementById('saved-load').click();
+    row('Opening the saved setup restores it', codeBefore + ' · ' + calBefore, w.location.hash + ' · ' + sel('caliber'), w.location.hash === codeBefore && sel('caliber') === calBefore);
+    w.confirm = () => true;
+    d.getElementById('saved-delete').click();
+    row('Delete removes it', 'No saved setups yet', sel('saved-list'), sel('saved-list') === 'No saved setups yet');
+  }
+
+  // Sight-in sheet renders.
+  await load('#preview-sightin');
+  const sheet = frame.contentDocument.querySelector('#print-root svg');
+  row('Sight-in target sheet renders', 'svg with grid', sheet ? 'svg, ' + sheet.querySelectorAll('line').length + ' lines' : 'missing', !!sheet && sheet.querySelectorAll('line').length > 20);
+
+  document.getElementById('summary').textContent = `${pass} passed, ${fail} failed`;
+  document.title = `UI ${pass} passed ${fail} failed`;
+})();
+</script>
+</body>
+</html>

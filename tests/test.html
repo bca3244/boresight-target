@@ -100,6 +100,23 @@ LISTS.forEach(([mode, cal]) => {
 row('Sight cutoff: 0.9 in starts at 1', 1, BTS.targetRanges(0.9, 22.1)[0], BTS.targetRanges(0.9, 22.1)[0] === 1);
 row('Sight cutoff: 1.5 in starts at 8', 8, BTS.targetRanges(1.5, 44.9)[0], BTS.targetRanges(1.5, 44.9)[0] === 8);
 
+// Trajectory table, near zero, click and energy math.
+{
+  const sol = BTS.solve(2796, 0.367, 1.5, 100);
+  const tbl = BTS.trajectoryTable(2796, 0.367, 1.5, sol.angle, [0, 50, 100, 200]);
+  row('Table: muzzle row', '−1.50 in, 2796 fps', `${tbl[0].y.toFixed(2)} in, ${Math.round(tbl[0].v)} fps`, Math.abs(tbl[0].y + 1.5) < 0.005 && Math.round(tbl[0].v) === 2796);
+  row('Table: on the sight line at the zero', '0.00 in', tbl[2].y.toFixed(3) + ' in', Math.abs(tbl[2].y) < 0.005);
+  row('Table: slows and drops past the zero', 'v falls, 200 yd below line', `${Math.round(tbl[3].v)} fps, ${tbl[3].y.toFixed(2)} in`, tbl[3].v < tbl[2].v && tbl[2].v < tbl[1].v && tbl[3].y < -1);
+  row('Table: time of flight grows', 't(200) > t(100) > 0', `${tbl[2].t.toFixed(3)} / ${tbl[3].t.toFixed(3)} s`, tbl[3].t > tbl[2].t && tbl[2].t > 0.1);
+  const nz = BTS.nearZero(2796, 0.367, 1.5, sol.angle, 100);
+  row('Near zero is between meet and zero', `${sol.meetYd.toFixed(1)} < near < 100`, nz && nz.toFixed(1), nz > sol.meetYd && nz < 100);
+  const c1 = BTS.clicks(2.5, 100, { unit: 'moa', value: 0.25 }), c2 = BTS.clicks(2.5, 100, { unit: 'mil', value: 0.1 });
+  row('Clicks: 2.5 in at 100 yd, ¼ MOA', '10 clicks (2.39 MOA)', `${c1.clicks} clicks (${c1.angle.toFixed(2)} MOA)`, c1.clicks === 10 && c1.angle.toFixed(2) === '2.39');
+  row('Clicks: 2.5 in at 100 yd, 0.1 mil', '7 clicks (0.69 mil)', `${c2.clicks} clicks (${c2.angle.toFixed(2)} mil)`, c2.clicks === 7 && c2.angle.toFixed(2) === '0.69');
+  const e = Math.round(BTS.energyFtLb(150, 2800));
+  row('Energy: 150 gr at 2800 fps', '2611 ft-lb', e + ' ft-lb', e === 2611);
+}
+
 // Every caliber, both unit systems: lists are non-empty, values are finite, and a default solve works.
 ['rifle', 'pistol', 'shotgun'].forEach(mode => {
   let bad = [];

@@ -44,16 +44,17 @@
   // and stops once x passes maxFt. y is measured from the bore's starting point.
   function fly(v0, bc, angle, maxFt, sample) {
     const k = RHO * Math.PI / (8 * bc * 144);
-    let x = 0, y = 0, vx = v0 * Math.cos(angle), vy = v0 * Math.sin(angle);
-    sample(0, 0, vy);
+    let x = 0, y = 0, t = 0, vx = v0 * Math.cos(angle), vy = v0 * Math.sin(angle);
+    sample(0, 0, vy, vx, 0);
     while (x < maxFt && vx > 1) {
       const v = Math.sqrt(vx * vx + vy * vy);
       const a = k * cdG1(v / SOUND) * v;
       x += vx * DT;
       y += vy * DT;
+      t += DT;
       vx -= a * vx * DT;
       vy -= (a * vy + GRAVITY) * DT;
-      sample(x, y, vy);
+      sample(x, y, vy, vx, t);
     }
   }
 
@@ -102,6 +103,48 @@
     });
     return pts;
   }
+
+  // Height (in, relative to the sight line), speed (fps) and time of flight (s) at each range in rangesYd.
+  function trajectoryTable(v0, bc, sightIn, angle, rangesYd) {
+    const want = rangesYd.slice().sort((a, b) => a - b), out = [];
+    let i = 0, p = null;
+    fly(v0, bc, angle, want[want.length - 1] * 3 + 1, (x, y, vy, vx, t) => {
+      const cur = { x, y, v: Math.sqrt(vx * vx + vy * vy), t };
+      while (i < want.length && x >= want[i] * 3) {
+        const a = p || cur, f = cur.x === a.x ? 0 : (want[i] * 3 - a.x) / (cur.x - a.x);
+        const lerp = k => a[k] + f * (cur[k] - a[k]);
+        out.push({ range: want[i], y: lerp('y') * 12 - sightIn, v: lerp('v'), t: lerp('t') });
+        i++;
+      }
+      p = cur;
+    });
+    return out;
+  }
+
+  // First range (yd) where the rising bullet crosses the sight line, or null if it never does before the zero.
+  function nearZero(v0, bc, sightIn, angle, zeroYd) {
+    const pts = trajectory(v0, bc, sightIn, angle, zeroYd, zeroYd / 2000);
+    for (let i = 1; i < pts.length; i++) {
+      if (pts[i - 1].y < 0 && pts[i].y >= 0) {
+        const a = pts[i - 1], b = pts[i];
+        return a.x + (0 - a.y) / (b.y - a.y) * (b.x - a.x);
+      }
+    }
+    return null;
+  }
+
+  // Scope adjustment for a group that landed offsetIn inches from the aim point at rangeYd yards.
+  // click: { unit: 'moa' | 'mil', value } (e.g. 0.25 MOA or 0.1 mil per click). Returns the angle and whole clicks.
+  const INCHES_PER_MOA_AT_100YD = 1.04720;
+  const INCHES_PER_MIL_AT_100YD = 3.6;
+  function clicks(offsetIn, rangeYd, click) {
+    const per100 = click.unit === 'mil' ? INCHES_PER_MIL_AT_100YD : INCHES_PER_MOA_AT_100YD;
+    const angle = Math.abs(offsetIn) / (per100 * rangeYd / 100);
+    return { angle, clicks: Math.round(angle / click.value) };
+  }
+
+  // Kinetic energy: ft-lb from grains and fps.
+  function energyFtLb(grains, fps) { return grains * fps * fps / 450436; }
 
   // ---- Dropdown rules ----
 
@@ -232,7 +275,7 @@
   }
 
   window.BTS = {
-    roundHalfEven, solve, trajectory, laserOffset,
+    roundHalfEven, solve, trajectory, trajectoryTable, nearZero, clicks, energyFtLb, laserOffset,
     calibers, sightHeights, weights, v1Weights, shapes, typicalVelocityFps, typicalBc, zeroRanges, targetRanges,
     MODES, GAUGES, SLUGS, CM_PER_INCH, METERS_PER_YARD,
     ATMOSPHERE: { densityLbFt3: RHO, soundFps: SOUND }

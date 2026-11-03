@@ -10,7 +10,14 @@
     error: $('error'), solution: $('solution'), chart: $('chart'), paper: $('paper'),
     printTarget: $('print-target'), printReport: $('print-report'), printRoot: $('print-root'),
     maxRise: $('max-rise'), chartCard: document.querySelector('.chart-card'), chartZoom: $('chart-zoom'), how: $('how'),
-    copyLink: $('copy-link'), toast: $('toast')
+    copyLink: $('copy-link'), toast: $('toast'),
+    caliberSearch: $('caliber-search'), caliberCount: $('caliber-count'),
+    savedCard: $('saved-card'), savedList: $('saved-list'), savedLoad: $('saved-load'), savedDelete: $('saved-delete'),
+    savedName: $('saved-name'), savedSave: $('saved-save'), savedNote: $('saved-note'), savedCount: $('saved-count'),
+    trajTable: $('traj-table'), trajNote: $('traj-note'),
+    cRange: $('c-range'), cClick: $('c-click'), cVert: $('c-vert'), cVdir: $('c-vdir'), cHoriz: $('c-horiz'), cHdir: $('c-hdir'),
+    cElev: $('c-elev'), cElevSub: $('c-elev-sub'), cWind: $('c-wind'), cWindSub: $('c-wind-sub'),
+    printSightin: $('print-sightin'), gridToggle: $('grid-toggle')
   };
 
   const DEFAULTS = {
@@ -64,7 +71,28 @@
     let pick = names.indexOf(keepName);
     if (pick < 0) pick = names.indexOf(DEFAULTS[state.mode].caliber);
     el.caliberLabel.textContent = state.mode === 'shotgun' ? 'Gauge' : 'Caliber';
-    fill(el.caliber, names, n => n, pick);
+    el.caliberSearch.value = '';
+    el.caliberSearch.parentElement.hidden = state.mode === 'shotgun';
+    fillCalibers(Math.max(0, pick), '');
+  }
+
+  // Caliber options keep their position in the full list as their value, so filtering never changes what idx() means.
+  // Every word typed must appear in the name: "6.5 creed" finds "6.5mm Creedmoor".
+  function fillCalibers(keepIndex, term) {
+    const names = BTS.calibers(state.mode);
+    const words = term.toLowerCase().split(/\s+/).filter(Boolean);
+    const matches = names.map((n, i) => i).filter(i => words.every(w => names[i].toLowerCase().includes(w)));
+    const shown = matches.length ? matches : [keepIndex];
+    el.caliber.innerHTML = '';
+    shown.forEach(i => {
+      const o = document.createElement('option');
+      o.value = String(i);
+      o.textContent = names[i];
+      el.caliber.appendChild(o);
+    });
+    el.caliber.value = String(shown.includes(keepIndex) ? keepIndex : shown[0]);
+    el.caliberCount.textContent = !words.length ? '' : matches.length
+      ? `${matches.length} of ${names.length} match “${term.trim()}”` : `No calibers match “${term.trim()}”`;
   }
 
   function buildSights(keepInches) {
@@ -162,10 +190,69 @@
           x: metric() ? top.x * BTS.METERS_PER_YARD : top.x,
           y: Math.max(0, metric() ? top.y * BTS.CM_PER_INCH : top.y)
         };
+        const nz = BTS.nearZero(state.vFps, state.bc, sightIn, sol.angle, zeroYd);
+        r.nearZero = nz == null ? null : (metric() ? nz * BTS.METERS_PER_YARD : nz);
+        r.table = trajectoryRows(sol.angle, sightIn, zero, zeroYd);
       }
     }
     state.result = r;
     return r;
+  }
+
+  // Trajectory table rows in display units: standard ranges for the firearm type plus the zero range.
+  const TABLE_RANGES = { rifle: [25, 50, 100, 150, 200, 250, 300], pistol: [10, 25, 50, 75, 100, 125, 150], shotgun: [10, 25, 50, 75, 100, 125, 150] };
+  function trajectoryRows(angle, sightIn, zero, zeroYd) {
+    const disp = Array.from(new Set(TABLE_RANGES[state.mode].concat(zero))).sort((a, b) => a - b);
+    const toYd = d => (metric() ? d / BTS.METERS_PER_YARD : d);
+    const grains = state.lists.weights[idx(el.weight)].grains;
+    return BTS.trajectoryTable(state.vFps, state.bc, sightIn, angle, disp.map(toYd)).map((p, i) => ({
+      range: disp[i],
+      zero: disp[i] === zero,
+      path: metric() ? p.y * BTS.CM_PER_INCH : p.y,
+      velocity: metric() ? p.v * 0.3048 : p.v,
+      energy: metric() ? BTS.energyFtLb(grains, p.v) * 1.35582 : BTS.energyFtLb(grains, p.v),
+      time: p.t
+    }));
+  }
+
+  function trajectoryUnits() {
+    return metric() ? { d: 'm', h: 'cm', v: 'm/s', e: 'J' } : { d: 'yd', h: 'in', v: 'fps', e: 'ft-lb' };
+  }
+
+  function renderTable() {
+    const r = state.result, u = trajectoryUnits();
+    const sign = v => (Math.abs(v) < 0.005 ? '0.00' : (v > 0 ? '+' : '−') + Math.abs(v).toFixed(2));
+    let h = `<thead><tr><th>Range (${u.d})</th><th>Bullet vs. sight line (${u.h})</th><th>Velocity (${u.v})</th><th>Energy (${u.e})</th><th>Time (s)</th></tr></thead><tbody>`;
+    r.table.forEach(row => {
+      h += `<tr${row.zero ? ' class="zero-row"' : ''}><td>${row.range}${row.zero ? ' <span class="tag">zero</span>' : ''}</td>` +
+        `<td class="${row.path > 0.005 ? 'up' : row.path < -0.005 ? 'down' : ''}">${sign(row.path)}</td>` +
+        `<td>${Math.round(row.velocity)}</td><td>${Math.round(row.energy)}</td><td>${row.time.toFixed(3)}</td></tr>`;
+    });
+    el.trajTable.innerHTML = h + '</tbody>';
+    el.trajNote.textContent = (r.nearZero != null ? `Near zero ${r.nearZero.toFixed(1)} ${u.d} · ` : '') + `Max rise ${riseText(r.rise)}`;
+  }
+
+  // ---------- Click calculator ----------
+
+  function updateClicks() {
+    const u = trajectoryUnits();
+    document.querySelectorAll('.c-dist').forEach(s => { s.textContent = u.d; });
+    document.querySelectorAll('.c-len').forEach(s => { s.textContent = metric() ? 'cm' : 'in'; });
+    const [unit, value] = el.cClick.value.split(':');
+    const click = { unit, value: Number(value) };
+    const range = parseFloat(el.cRange.value);
+    const toIn = v => (metric() ? v / BTS.CM_PER_INCH : v);
+    const rangeYd = metric() ? range / BTS.METERS_PER_YARD : range;
+    const show = (outEl, subEl, amount, dirOff, dirMove) => {
+      const v = amount === '' ? 0 : parseFloat(amount);
+      if (!(range > 0) || !(v >= 0)) { outEl.textContent = '–'; subEl.textContent = 'Enter the shot distance and offset'; return; }
+      const c = BTS.clicks(toIn(v), rangeYd, click);
+      if (c.clicks === 0) { outEl.textContent = 'No change'; subEl.textContent = v > 0 ? 'Less than half a click' : ''; return; }
+      outEl.innerHTML = `${c.clicks} click${c.clicks === 1 ? '' : 's'} <b>${dirMove}</b>`;
+      subEl.textContent = `${c.angle.toFixed(2)} ${unit === 'mil' ? 'mil' : 'MOA'} · group is ${v} ${metric() ? 'cm' : 'in'} ${dirOff}`;
+    };
+    show(el.cElev, el.cElevSub, el.cVert.value, el.cVdir.value, el.cVdir.value === 'low' ? 'UP' : 'DOWN');
+    show(el.cWind, el.cWindSub, el.cHoriz.value, el.cHdir.value, el.cHdir.value === 'left' ? 'RIGHT' : 'LEFT');
   }
 
   function buildTargets(keep) {
@@ -211,12 +298,17 @@
     el.error.hidden = ok;
     el.error.innerHTML = r.error || '';
     el.solution.hidden = !ok;
-    el.printTarget.disabled = el.printReport.disabled = !ok;
+    el.printTarget.disabled = el.printReport.disabled = el.printSightin.disabled = !ok;
+    document.getElementById('traj-card').hidden = !ok;
+    // The calculator's shot distance follows the zero range until the user types their own.
+    if (!el.cRange.dataset.edited) el.cRange.value = String(r.zero);
+    updateClicks();
     if (!ok) { el.chart.innerHTML = ''; syncUrl(); return; }
     buildTargets(keepTarget);
     el.meet.textContent = r.meet.toFixed(1);
     el.meetUnit.textContent = metric() ? 'm' : 'yd';
     el.maxRise.textContent = 'Max rise ' + riseText(r.rise);
+    renderTable();
     renderTarget();
   }
 
@@ -469,6 +561,8 @@
     s += `<rect width="${W}" height="${H}" fill="#fff"/>`;
     s += `<text x="${W / 2}" y="0.55" text-anchor="middle" font-size="0.12" fill="#555">Boresight target · ${esc(BTS.calibers(state.mode)[idx(el.caliber)])}</text>`;
     s += `<text x="0.95" y="1.05" text-anchor="middle" font-size="0.34" font-weight="700">TOP</text><text x="${W - 0.95}" y="1.05" text-anchor="middle" font-size="0.34" font-weight="700">TOP</text>`;
+    // Optional light grid through the aim point: 1 in squares (1 cm in metric) for reading offsets.
+    if (el.gridToggle.checked) s += gridLines(cx, aimY, metric() ? 1 / 2.54 : 1, 0.45, 1.25, W - 0.45, fy - 0.45, '#d3d8de', 0.008);
     // Aim point crosshair (the sight goes here).
     s += `<line x1="0.45" y1="${aimY}" x2="${W - 0.45}" y2="${aimY}" ${dash}/>`;
     s += `<line x1="${cx}" y1="0.85" x2="${cx}" y2="${fy - 0.4}" ${dash}/>`;
@@ -485,13 +579,7 @@
     s += `<text x="0.5" y="${ly}" font-size="0.12" font-weight="700">${esc(offsetSentence(t))}</text>`;
     s += `<text x="0.5" y="${ly + 0.22}" font-size="0.11" fill="#333">Put the laser in the circle, then adjust the sight to the crosshair.</text>`;
     s += `<text x="0.5" y="${ly + 0.4}" font-size="0.11" fill="#333">A dim room or shaded target makes the laser easier to see.</text>`;
-    // Scale check bars.
-    const by = ly + 0.8;
-    s += `<text x="0.5" y="${by}" font-size="0.105" font-weight="700">Scale check: these bars must measure exactly 1 in and 5 cm.</text>`;
-    s += `<g stroke="#000" stroke-width="0.02"><line x1="0.5" y1="${by + 0.3}" x2="1.5" y2="${by + 0.3}" stroke-width="0.05"/><line x1="0.5" y1="${by + 0.18}" x2="0.5" y2="${by + 0.42}"/><line x1="1.5" y1="${by + 0.18}" x2="1.5" y2="${by + 0.42}"/>`;
-    const cm5 = 5 / 2.54;
-    s += `<line x1="1.9" y1="${by + 0.3}" x2="${1.9 + cm5}" y2="${by + 0.3}" stroke-width="0.05"/><line x1="1.9" y1="${by + 0.18}" x2="1.9" y2="${by + 0.42}"/><line x1="${1.9 + cm5}" y1="${by + 0.18}" x2="${1.9 + cm5}" y2="${by + 0.42}"/></g>`;
-    s += `<text x="1" y="${by + 0.58}" text-anchor="middle" font-size="0.1">1 in</text><text x="${1.9 + cm5 / 2}" y="${by + 0.58}" text-anchor="middle" font-size="0.1">5 cm</text>`;
+    s += scaleBars(0.5, ly + 0.8);
     const rows = settingsRows().filter(rw => rw[0] !== 'Meet distance' && rw[0] !== 'Maximum rise');
     rows.push(['Printed', new Date().toLocaleString()]);
     rows.forEach((rw, i) => {
@@ -501,22 +589,91 @@
     return `<div class="sheet">${s}</div>`;
   }
 
+  // Grid lines every `step` inches through (cx, cy), clipped to the box x0..x1, y0..y1. Inches are the SVG unit.
+  function gridLines(cx, cy, step, x0, y0, x1, y1, color, width) {
+    let g = `<g stroke="${color}" stroke-width="${width}">`;
+    for (let x = cx - Math.floor((cx - x0) / step) * step; x <= x1 + 1e-9; x += step) g += `<line x1="${x}" y1="${y0}" x2="${x}" y2="${y1}"/>`;
+    for (let y = cy - Math.floor((cy - y0) / step) * step; y <= y1 + 1e-9; y += step) g += `<line x1="${x0}" y1="${y}" x2="${x1}" y2="${y}"/>`;
+    return g + '</g>';
+  }
+
+  // 1 in and 5 cm bars for checking the printer kept true scale.
+  function scaleBars(x, y) {
+    const cm5 = 5 / 2.54, b = x + 1.4;
+    let s = `<text x="${x}" y="${y}" font-size="0.105" font-weight="700">Scale check: these bars must measure exactly 1 in and 5 cm.</text>`;
+    s += `<g stroke="#000" stroke-width="0.02"><line x1="${x}" y1="${y + 0.3}" x2="${x + 1}" y2="${y + 0.3}" stroke-width="0.05"/><line x1="${x}" y1="${y + 0.18}" x2="${x}" y2="${y + 0.42}"/><line x1="${x + 1}" y1="${y + 0.18}" x2="${x + 1}" y2="${y + 0.42}"/>`;
+    s += `<line x1="${b}" y1="${y + 0.3}" x2="${b + cm5}" y2="${y + 0.3}" stroke-width="0.05"/><line x1="${b}" y1="${y + 0.18}" x2="${b}" y2="${y + 0.42}"/><line x1="${b + cm5}" y1="${y + 0.18}" x2="${b + cm5}" y2="${y + 0.42}"/></g>`;
+    s += `<text x="${x + 0.5}" y="${y + 0.58}" text-anchor="middle" font-size="0.1">1 in</text><text x="${b + cm5 / 2}" y="${y + 0.58}" text-anchor="middle" font-size="0.1">5 cm</text>`;
+    return s;
+  }
+
+  // Sight-in target for the first shots at the zero range: grid squares (1 in, or 1 cm in metric) around a center diamond.
+  function sightinSheet(paper) {
+    const W = paper.w, H = paper.h, r = state.result;
+    const step = metric() ? 1 / 2.54 : 1, unitL = metric() ? 'cm' : 'in', unitD = metric() ? 'm' : 'yd';
+    const x0 = 0.5, x1 = W - 0.5, y0 = 1.25, y1 = H - 2.35, cx = W / 2, cy = (y0 + y1) / 2;
+    // What one click and one MOA / mil measure at the zero range, in squares.
+    const zeroYd = r.zeroYd, moaIn = 1.0472 * zeroYd / 100, milIn = 3.6 * zeroYd / 100;
+    const fmtL = inches => (metric() ? (inches * 2.54).toFixed(2) + ' cm' : inches.toFixed(2) + ' in');
+    let s = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}in" height="${H}in" viewBox="0 0 ${W} ${H}" font-family="Arial, Helvetica, sans-serif">`;
+    s += `<rect width="${W}" height="${H}" fill="#fff"/>`;
+    s += `<text x="${W / 2}" y="0.62" text-anchor="middle" font-size="0.22" font-weight="700">Sight-in target · shoot from ${r.zero} ${unitD}</text>`;
+    s += `<text x="${W / 2}" y="0.9" text-anchor="middle" font-size="0.12" fill="#555">${esc(BTS.calibers(state.mode)[idx(el.caliber)])} · squares are 1 ${unitL}</text>`;
+    s += gridLines(cx, cy, step, x0, y0, x1, y1, '#b9c1cb', 0.012);
+    // Every 5th line and the center lines darker, so squares are easy to count.
+    s += gridLines(cx, cy, step * 5, x0, y0, x1, y1, '#6e7a88', 0.02);
+    s += `<line x1="${x0}" y1="${cy}" x2="${x1}" y2="${cy}" stroke="#000" stroke-width="0.03"/><line x1="${cx}" y1="${y0}" x2="${cx}" y2="${y1}" stroke="#000" stroke-width="0.03"/>`;
+    s += `<rect x="${x0}" y="${y0}" width="${x1 - x0}" height="${y1 - y0}" fill="none" stroke="#000" stroke-width="0.03"/>`;
+    // Square counts along the top and left edges.
+    for (let k = 5; cx + k * step <= x1 + 1e-9; k += 5) {
+      s += `<text x="${cx + k * step}" y="${y0 - 0.08}" text-anchor="middle" font-size="0.11" fill="#444">${k}</text><text x="${cx - k * step}" y="${y0 - 0.08}" text-anchor="middle" font-size="0.11" fill="#444">${k}</text>`;
+    }
+    for (let k = 5; cy + k * step <= y1 + 1e-9; k += 5) {
+      s += `<text x="${x0 - 0.08}" y="${cy + k * step + 0.04}" text-anchor="end" font-size="0.11" fill="#444">${k}</text><text x="${x0 - 0.08}" y="${cy - k * step + 0.04}" text-anchor="end" font-size="0.11" fill="#444">${k}</text>`;
+    }
+    // Center diamond with a small white square to aim at.
+    const d = 0.5;
+    s += `<path d="M${cx} ${cy - d}L${cx + d} ${cy}L${cx} ${cy + d}L${cx - d} ${cy}Z" fill="#000"/>`;
+    s += `<rect x="${cx - 0.07}" y="${cy - 0.07}" width="0.14" height="0.14" fill="#fff"/>`;
+    s += `<text x="${x0 + 0.1}" y="${y0 + 0.25}" font-size="0.2" font-weight="700">TOP</text>`;
+    // Footer.
+    const fy = y1 + 0.45;
+    s += `<text x="0.5" y="${fy}" font-size="0.13" font-weight="700">Aim at the diamond. Count how many squares the group's center is from it, up/down and left/right,</text>`;
+    s += `<text x="0.5" y="${fy + 0.2}" font-size="0.13" font-weight="700">then enter those distances in "Adjust after your first shots".</text>`;
+    s += `<text x="0.5" y="${fy + 0.48}" font-size="0.115" fill="#333">At ${r.zero} ${unitD}: 1 MOA = ${fmtL(moaIn)} · ¼ MOA click = ${fmtL(moaIn / 4)} · 0.1 mil click = ${fmtL(milIn / 10)}</text>`;
+    s += scaleBars(0.5, fy + 0.85);
+    const info = [['Zero range', r.zero + ' ' + unitD], ['Sight height', r.sight.value.toFixed(1) + (metric() ? ' cm' : ' in')],
+      ['Bullet', state.lists.weights[idx(el.weight)].label + ' ' + state.lists.shapes[idx(el.shape)].label], ['Printed', new Date().toLocaleString()]];
+    info.forEach((rw, i) => { s += `<text x="${W - 0.5}" y="${fy + 0.85 + i * 0.16}" text-anchor="end" font-size="0.105"><tspan fill="#555">${esc(rw[0])}:</tspan> ${esc(rw[1])}</text>`; });
+    s += `</svg>`;
+    return `<div class="sheet">${s}</div>`;
+  }
+
   function reportSheet(paper) {
-    const r = state.result, d = chartData();
+    const r = state.result, u = trajectoryUnits();
     const light = { grid: '#d9dee5', axis: '#5f6b7a', tick: '#444', title: '#222', los: '#1f6fe5', path: '#b07d0b', laser: '#e0283d', accent: '#0f9d8a', bg: '#fff' };
     // The report always shows the full zero range so the maximum rise is on the chart.
     const saved = state.plot; state.plot = 'full';
-    const chart = chartSVG(chartData(), 680, 290, light, false).svg;
+    const chart = chartSVG(chartData(), 680, 230, light, false).svg;
     state.plot = saved;
-    const rows = settingsRows().map(rw => `<tr><th>${esc(rw[0])}</th><td>${esc(rw[1])}</td></tr>`).join('');
-    const unitD = metric() ? 'm' : 'yd';
+    // Settings in two side-by-side tables to leave room for the trajectory table.
+    const all = settingsRows().concat(r.nearZero != null ? [['Near zero', r.nearZero.toFixed(1) + ' ' + u.d]] : []);
+    const half = Math.ceil(all.length / 2);
+    const tbl = list => `<table>${list.map(rw => `<tr><th>${esc(rw[0])}</th><td>${esc(rw[1])}</td></tr>`).join('')}</table>`;
+    const rows = `<div class="report-cols">${tbl(all.slice(0, half))}${tbl(all.slice(half))}</div>`;
+    const sign = v => (Math.abs(v) < 0.005 ? '0.00' : (v > 0 ? '+' : '−') + Math.abs(v).toFixed(2));
+    const traj = `<table class="report-traj"><tr><th>Range (${u.d})</th><th>Bullet vs. sight line (${u.h})</th><th>Velocity (${u.v})</th><th>Energy (${u.e})</th><th>Time (s)</th></tr>` +
+      r.table.map(row => `<tr${row.zero ? ' class="zero-row"' : ''}><td>${row.range}${row.zero ? ' (zero)' : ''}</td><td>${sign(row.path)}</td><td>${Math.round(row.velocity)}</td><td>${Math.round(row.energy)}</td><td>${row.time.toFixed(3)}</td></tr>`).join('') + '</table>';
+    const unitD = u.d;
     return `<div class="sheet report" style="width:${paper.w}in;height:${paper.h}in">
       <header><svg viewBox="0 0 32 32" width="34" height="34"><circle cx="16" cy="16" r="11" fill="none" stroke="#0f9d8a" stroke-width="2.5"/><path d="M16 1v8M16 23v8M1 16h8M23 16h8" stroke="#0f9d8a" stroke-width="2.5"/><circle cx="16" cy="16" r="3" fill="#e0283d"/></svg>
       <div><h1>Boresight Report</h1><p>${esc(BTS.calibers(state.mode)[idx(el.caliber)])} · zeroed at ${r.zero} ${unitD}</p></div></header>
       <p class="report-meet">Line of sight and laser beam meet at <strong>${r.meet.toFixed(1)} ${unitD}</strong></p>
       <div class="report-chart">${chart}</div>
       <p class="report-legend"><span style="color:#1f6fe5">━ Line of sight</span><span style="color:#b07d0b">━ Bullet path</span><span style="color:#e0283d">━ Laser beam</span></p>
-      <table>${rows}</table>
+      ${rows}
+      <h2>Trajectory</h2>
+      ${traj}
       <h2>Aligning the sight at the meet distance</h2>
       <ul>
         <li><strong>Scope:</strong> center the crosshair on the laser spot.</li>
@@ -533,9 +690,10 @@
     let style = document.getElementById('page-size');
     if (!style) { style = document.createElement('style'); style.id = 'page-size'; document.head.appendChild(style); }
     style.textContent = `@page { size: ${paper.css}; margin: 0; }`;
-    el.printRoot.innerHTML = kind === 'target' ? targetSheet(paper) : reportSheet(paper);
+    el.printRoot.innerHTML = SHEETS[kind](paper);
     window.print();
   }
+  const SHEETS = { target: targetSheet, report: reportSheet, sightin: sightinSheet };
   window.addEventListener('afterprint', () => { el.printRoot.innerHTML = ''; });
 
   // ---------- Events ----------
@@ -569,6 +727,10 @@
     state.units = units;
     savePref('units', units);
     setPressed('[data-units]', 'data-units', units);
+    // Click calculator: convert the measured offsets, and let the shot distance follow the zero again.
+    const f = units === 'metric' ? BTS.CM_PER_INCH : 1 / BTS.CM_PER_INCH;
+    [el.cVert, el.cHoriz].forEach(i => { const v = parseFloat(i.value); if (v > 0) i.value = String(Math.round(v * f * 10) / 10); });
+    delete el.cRange.dataset.edited;
     buildSights(sightIn);
     buildWeights(grains);
     buildShapes(shape);
@@ -586,16 +748,101 @@
     syncUrl();
   }));
 
-  el.caliber.addEventListener('change', () => {
+  function onCaliberChange() {
     buildWeights(null);
     buildShapes(state.lists.shapes[idx(el.shape)] && state.lists.shapes[idx(el.shape)].label);
     setTypicalLoad();
     render();
+  }
+  el.caliber.addEventListener('change', onCaliberChange);
+  // Searching narrows the caliber list; if the current caliber drops out, the first match is selected.
+  el.caliberSearch.addEventListener('input', () => {
+    const before = idx(el.caliber);
+    fillCalibers(before, el.caliberSearch.value);
+    if (idx(el.caliber) !== before) onCaliberChange();
+  });
+  el.caliberSearch.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && el.caliberSearch.value) { el.caliberSearch.value = ''; fillCalibers(idx(el.caliber), ''); e.stopPropagation(); }
+    if (e.key === 'Enter') { e.preventDefault(); el.caliber.focus(); }
   });
   el.sight.addEventListener('change', () => render(keepTargetValue()));
   el.weight.addEventListener('change', () => { setTypicalLoad(); render(keepTargetValue()); });
   el.shape.addEventListener('change', () => { setTypicalLoad(); render(keepTargetValue()); });
-  el.zero.addEventListener('change', () => render(keepTargetValue()));
+  el.zero.addEventListener('change', () => { delete el.cRange.dataset.edited; render(keepTargetValue()); });
+
+  // Click calculator inputs.
+  el.cClick.value = loadPref('click', 'moa:0.25');
+  if (!el.cClick.value) el.cClick.value = 'moa:0.25';
+  el.cRange.addEventListener('input', () => { el.cRange.dataset.edited = '1'; updateClicks(); });
+  [el.cVert, el.cHoriz, el.cVdir, el.cHdir].forEach(i => i.addEventListener('input', updateClicks));
+  el.cClick.addEventListener('change', () => { savePref('click', el.cClick.value); updateClicks(); });
+
+  // Grid on the boresight target (remembered per browser).
+  el.gridToggle.checked = loadPref('grid', 'on') === 'on';
+  el.gridToggle.addEventListener('change', () => savePref('grid', el.gridToggle.checked ? 'on' : 'off'));
+  el.printSightin.addEventListener('click', () => print('sightin'));
+
+  // ---------- My setups: named share codes kept in this browser ----------
+  function readSaved() {
+    try { const v = JSON.parse(localStorage.getItem('bts.saved') || '[]'); return Array.isArray(v) ? v.filter(s => s && s.name && s.code) : []; }
+    catch (e) { return null; }   // null = storage unavailable
+  }
+  function writeSaved(list) {
+    try { localStorage.setItem('bts.saved', JSON.stringify(list)); return true; } catch (e) { return false; }
+  }
+  function renderSaved(selectName) {
+    const list = readSaved();
+    const available = list !== null;
+    el.savedList.innerHTML = '';
+    (list || []).slice().sort((a, b) => a.name.localeCompare(b.name)).forEach(s => {
+      const o = document.createElement('option');
+      o.value = s.name; o.textContent = s.name;
+      el.savedList.appendChild(o);
+    });
+    if (!list || !list.length) {
+      const o = document.createElement('option');
+      o.textContent = available ? 'No saved setups yet' : 'Saving is not available in this browser';
+      o.value = ''; el.savedList.appendChild(o);
+    }
+    if (selectName) el.savedList.value = selectName;
+    const has = !!(list && list.length);
+    el.savedList.disabled = el.savedLoad.disabled = el.savedDelete.disabled = !has;
+    el.savedSave.disabled = el.savedName.disabled = !available;
+    el.savedCount.textContent = has ? String(list.length) : '';
+    if (!available) el.savedNote.textContent = 'This browser is blocking site storage, so setups can’t be saved here. Copy link still works.';
+  }
+  function suggestedName() {
+    return BTS.calibers(state.mode)[idx(el.caliber)] + ' · ' + state.lists.weights[idx(el.weight)].label + ' · ' +
+      state.lists.zeros[idx(el.zero)] + (metric() ? ' m' : ' yd') + ' zero';
+  }
+  el.savedSave.addEventListener('click', () => {
+    const list = readSaved();
+    if (list === null) return;
+    const name = (el.savedName.value.trim() || suggestedName()).slice(0, 60);
+    const code = shareCode(), existing = list.find(s => s.name === name);
+    if (existing) existing.code = code; else list.push({ name, code });
+    if (!writeSaved(list)) { toast('Couldn’t save in this browser'); return; }
+    el.savedName.value = '';
+    renderSaved(name);
+    toast(existing ? `Updated “${name}”` : `Saved “${name}”`);
+  });
+  el.savedName.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); el.savedSave.click(); } });
+  el.savedName.addEventListener('focus', () => { el.savedName.placeholder = suggestedName(); });
+  el.savedLoad.addEventListener('click', () => {
+    const s = (readSaved() || []).find(x => x.name === el.savedList.value);
+    if (s && applyShareCode('#' + s.code)) toast(`Opened “${s.name}”`);
+  });
+  el.savedList.addEventListener('dblclick', () => el.savedLoad.click());
+  el.savedDelete.addEventListener('click', () => {
+    const name = el.savedList.value, list = readSaved();
+    if (!name || !list || !window.confirm(`Delete the saved setup “${name}”?`)) return;
+    writeSaved(list.filter(s => s.name !== name));
+    renderSaved();
+    toast(`Deleted “${name}”`);
+  });
+  el.savedCard.open = loadPref('savedOpen', 'closed') === 'open';
+  el.savedCard.addEventListener('toggle', () => savePref('savedOpen', el.savedCard.open ? 'open' : 'closed'));
+  renderSaved();
   el.target.addEventListener('change', renderTarget);
   ['input', 'change'].forEach(ev => {
     el.velocity.addEventListener(ev, () => { readLoadInputs(); render(keepTargetValue()); });
@@ -652,7 +899,7 @@
   // index.html#preview-target or #preview-report shows a printable sheet on screen.
   // An optional @range picks a target range, e.g. #preview-target@10.
   function showPreview(hash) {
-    const m = hash.match(/^#preview-(target|report)(?:@(\d+))?$/) || [];
+    const m = hash.match(/^#preview-(target|report|sightin)(?:@(\d+))?$/) || [];
     const kind = m[1];
     document.body.classList.toggle('previewing', !!kind);
     if (m[2]) {
@@ -660,7 +907,7 @@
       if (i >= 0) { el.target.value = String(i); renderTarget(); }
     }
     if (kind && state.result && !state.result.error) {
-      el.printRoot.innerHTML = kind === 'target' ? targetSheet(PAPER[state.paper]) : reportSheet(PAPER[state.paper]);
+      el.printRoot.innerHTML = SHEETS[kind](PAPER[state.paper]);
     } else if (!kind) el.printRoot.innerHTML = '';
   }
   // A link pasted into an open tab only changes the hash, so apply it here too.

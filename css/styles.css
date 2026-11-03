@@ -177,6 +177,56 @@ input.custom { border-color: #a07a1d; }
 .how ol { margin: 0; padding: 0 20px 18px 40px; color: var(--muted); display: grid; gap: 6px; }
 .how strong { color: var(--text); }
 
+/* ---------- Caliber search ---------- */
+.search { position: relative; display: block; }
+.search svg { position: absolute; left: 11px; top: 50%; width: 16px; height: 16px; transform: translateY(-50%); fill: none; stroke: var(--faint); stroke-width: 2; stroke-linecap: round; pointer-events: none; }
+.search input {
+  width: 100%; height: 36px; padding: 0 12px 0 34px; font-size: 14px;
+  background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); outline: none;
+}
+.search input::placeholder { color: var(--faint); }
+.search input:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.22); }
+.search[hidden] { display: none; }
+
+/* ---------- My setups ---------- */
+.saved .count { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; margin-left: 6px; border-radius: 10px; background: var(--surface-3); color: var(--accent); font-size: 12px; vertical-align: 1px; }
+.saved .count:empty { display: none; }
+.saved-body { display: grid; gap: 10px; padding: 0 20px 18px; }
+.saved-row { display: flex; gap: 8px; }
+.saved-row select, .saved-row input { flex: 1; min-width: 0; }
+.saved-row input[type="text"] { height: 40px; padding: 0 12px; background: var(--bg); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); outline: none; }
+.saved-row input[type="text"]:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.22); }
+.saved-row input::placeholder { color: var(--faint); }
+.btn.small { height: 40px; padding: 0 14px; }
+.saved-row .icon-btn { width: 40px; height: 40px; }
+.icon-btn.danger:hover { color: #ff8a96; border-color: var(--danger-border); }
+.icon-btn:disabled, .btn:disabled { opacity: 0.45; cursor: default; }
+
+/* ---------- Grid toggle ---------- */
+.check { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13.5px; cursor: pointer; }
+.check input { width: 16px; height: 16px; accent-color: var(--accent); }
+
+/* ---------- Trajectory table ---------- */
+.table-wrap { overflow-x: auto; margin-top: 12px; }
+table.data { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+table.data th { text-align: right; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; padding: 8px 10px; border-bottom: 1px solid var(--border-strong); white-space: nowrap; }
+table.data td { text-align: right; padding: 8px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+table.data th:first-child, table.data td:first-child { text-align: left; }
+table.data td.up { color: var(--path); }
+table.data td.down { color: var(--muted); }
+table.data tr.zero-row td { background: rgba(45, 212, 191, 0.07); }
+table.data .tag { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 6px; background: rgba(45, 212, 191, 0.16); color: var(--accent); font-size: 11.5px; font-weight: 700; }
+#traj-card .chart-head .muted { font-size: 13.5px; }
+
+/* ---------- Click calculator ---------- */
+#clicks-card { display: grid; gap: 12px; }
+.clicks-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.combo { display: grid; grid-template-columns: minmax(0, 1fr) 92px; gap: 6px; }
+.clicks-out { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.dial { display: grid; gap: 4px; padding: 14px 16px; border-radius: var(--radius-sm); background: var(--bg); border: 1px solid var(--border); }
+.dial-value { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.dial-value b { color: var(--accent); }
+
 /* ---------- Chart tools and maximized view ---------- */
 .chart-tools { display: flex; align-items: center; gap: 8px; }
 .icon-btn {
@@ -208,13 +258,16 @@ body.chart-open { overflow: hidden; }
 .foot { margin-top: 28px; color: var(--faint); font-size: 12.5px; text-align: center; }
 
 /* ---------- Responsive ---------- */
+@media (max-width: 1100px) {
+  .clicks-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 @media (max-width: 920px) {
   .layout { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 520px) {
   #app { padding: 16px 16px 32px; }
   .card { padding: 16px; }
-  .field-row, .hero-grid { grid-template-columns: minmax(0, 1fr); }
+  .field-row, .hero-grid, .clicks-grid, .clicks-out { grid-template-columns: minmax(0, 1fr); }
   .tagline { display: none; }
   .stat { padding: 0; }
   .brand h1 { font-size: 18px; }
@@ -240,6 +293,13 @@ body.previewing #print-root { display: block; width: max-content; margin: 24px a
 .report table { border-collapse: collapse; width: 100%; font-size: 10.5pt; }
 .report th, .report td { text-align: left; padding: 2.5pt 6pt; border-bottom: 0.6pt solid #ddd; }
 .report th { width: 38%; color: #555; font-weight: 600; }
+.report-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14pt; }
+.report-cols th { width: 46%; }
+.report table.report-traj { font-size: 9.5pt; }
+.report-traj th, .report-traj td { text-align: right; padding: 2pt 6pt; }
+.report-traj th { width: auto; color: #555; font-weight: 600; border-bottom: 0.8pt solid #999; }
+.report-traj th:first-child, .report-traj td:first-child { text-align: left; }
+.report-traj tr.zero-row td { background: #e8f6f3; font-weight: 600; }
 .report ul { margin: 0; padding-left: 16pt; display: grid; gap: 3pt; }
 .report footer { margin-top: auto; color: #666; font-size: 8.5pt; border-top: 0.6pt solid #ddd; padding-top: 6pt; }
 @media print {
