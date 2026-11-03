@@ -54,7 +54,7 @@ button, input, select { font: inherit; color: inherit; }
 
 /* ---------- Layout ---------- */
 .layout { display: grid; grid-template-columns: minmax(300px, 400px) minmax(0, 1fr); gap: 20px; align-items: start; }
-.results { display: grid; gap: 20px; min-width: 0; }
+.results { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; min-width: 0; }
 .card {
   background: linear-gradient(180deg, var(--surface-2), var(--surface) 140px);
   border: 1px solid var(--border);
@@ -250,9 +250,10 @@ table.data td.down { color: var(--muted); }
 table.data tr.zero-row td { background: rgba(45, 212, 191, 0.07); }
 table.data .tag { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 6px; background: rgba(45, 212, 191, 0.16); color: var(--accent); font-size: 11.5px; font-weight: 700; }
 #traj-card .chart-head .muted { font-size: 13.5px; }
-.traj-tools { display: flex; align-items: flex-end; gap: 14px; margin-top: 12px; }
-.traj-tools .wind-field { flex: 0 0 120px; }
-.traj-tools .hint { margin: 0 0 2px; }
+.traj-tools { display: flex; align-items: flex-end; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+.traj-tools .t-field { flex: 0 0 116px; }
+.traj-tools #print-card { margin-left: auto; }
+.traj-hint { margin: 8px 0 0; }
 table.data thead tr:first-child th { border-bottom: 0; padding-bottom: 0; color: var(--faint); }
 table.data th.grp { text-align: center; }
 table.data .sep { border-left: 1px solid var(--border); }
@@ -339,6 +340,9 @@ body.previewing #print-root { display: block; width: max-content; margin: 24px a
 .report-traj th { width: auto; color: #555; font-weight: 600; border-bottom: 0.8pt solid #999; }
 .report-traj th:first-child, .report-traj td:first-child { text-align: left; }
 .report-traj tr.zero-row td { background: #e8f6f3; font-weight: 600; }
+.report table.report-traj.dense { font-size: 8.5pt; }
+.report-traj.dense th, .report-traj.dense td { padding: 1pt 5pt; }
+.report-note { color: #555; font-size: 9pt; }
 .report ul { margin: 0; padding-left: 16pt; display: grid; gap: 3pt; }
 .report footer { margin-top: auto; color: #666; font-size: 8.5pt; border-top: 0.6pt solid #ddd; padding-top: 6pt; }
 @media print {

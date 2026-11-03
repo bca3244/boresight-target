@@ -232,12 +232,31 @@
           <p class="muted" id="traj-note"></p>
         </div>
         <div class="traj-tools">
-          <label class="mini wind-field">
+          <label class="mini t-field">
+            <span>Out to</span>
+            <span class="input-unit"><input id="t-max" type="number" inputmode="decimal" min="10" max="2000" step="any"><span class="t-dist">yd</span></span>
+          </label>
+          <label class="mini t-field">
+            <span>Every</span>
+            <select id="t-step">
+              <option value="5">5</option><option value="10">10</option><option value="25">25</option>
+              <option value="50">50</option><option value="100">100</option><option value="200">200</option>
+            </select>
+          </label>
+          <label class="mini t-field">
             <span>Crosswind</span>
             <span class="input-unit"><input id="wind" type="number" inputmode="decimal" min="0" max="99" step="1"><span id="wind-unit">mph</span></span>
           </label>
-          <p class="hint">Drift is for a full-value wind (straight across, from 3 or 9 o'clock) and is with the wind. MOA and mil are from the line of sight.</p>
+          <label class="mini t-field">
+            <span>From</span>
+            <select id="wind-clock"></select>
+          </label>
+          <button type="button" class="btn" id="print-card" title="A small card of scope clicks for each range, to keep with the rifle">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18v12H3z"/><path d="M3 10h18M8 6v12"/></svg>
+            Print range card
+          </button>
         </div>
+        <p class="hint traj-hint" id="traj-hint">MOA and mil are from the line of sight. 3 and 9 o'clock winds push the bullet the most; 12 and 6 o'clock winds don't push it sideways.</p>
         <div class="table-wrap"><table class="data" id="traj-table"></table></div>
       </div>
 

@@ -15,6 +15,7 @@
     savedCard: $('saved-card'), savedList: $('saved-list'), savedLoad: $('saved-load'), savedDelete: $('saved-delete'),
     savedName: $('saved-name'), savedSave: $('saved-save'), savedNote: $('saved-note'), savedCount: $('saved-count'),
     trajTable: $('traj-table'), trajNote: $('traj-note'), wind: $('wind'), windUnit: $('wind-unit'),
+    windClock: $('wind-clock'), tMax: $('t-max'), tStep: $('t-step'), trajHint: $('traj-hint'), printCard: $('print-card'),
     cRange: $('c-range'), cClick: $('c-click'), cVert: $('c-vert'), cVdir: $('c-vdir'), cHoriz: $('c-horiz'), cHdir: $('c-hdir'),
     cElev: $('c-elev'), cElevSub: $('c-elev-sub'), cWind: $('c-wind'), cWindSub: $('c-wind-sub'),
     printSightin: $('print-sightin'),
@@ -35,6 +36,19 @@
   function savePref(key, value) { try { localStorage.setItem('bts.' + key, value); } catch (e) { /* storage unavailable */ } }
   const WIND_DEFAULT_MPH = 10, KMH_PER_MPH = 1.609344;
   function windPref() { const v = parseFloat(loadPref('wind', '')); return v >= 0 && v < 100 ? v : WIND_DEFAULT_MPH; }
+  function clockPref() { const v = parseInt(loadPref('windclock', '3'), 10); return v >= 1 && v <= 12 ? v : 3; }
+  // Trajectory table: out to `max` every `step`, plus a short first row when the step is longer.
+  const TABLE_DEFAULTS = { rifle: { max: 300, step: 50 }, pistol: { max: 150, step: 25 }, shotgun: { max: 150, step: 25 } };
+  const TABLE_SHORT = { rifle: 25, pistol: 10, shotgun: 10 };
+  const TABLE_STEPS = [5, 10, 25, 50, 100, 200], TABLE_MAX = 2000, TABLE_ROWS = 40;
+  function tablePrefs() {
+    const out = {};
+    Object.keys(TABLE_DEFAULTS).forEach(mode => {
+      const [max, step] = loadPref('table.' + mode, '').split(':').map(Number);
+      out[mode] = max >= 10 && max <= TABLE_MAX && TABLE_STEPS.includes(step) ? { max, step } : Object.assign({}, TABLE_DEFAULTS[mode]);
+    });
+    return out;
+  }
 
   const state = {
     units: loadPref('units', 'english') === 'metric' ? 'metric' : 'english',
@@ -47,6 +61,8 @@
     custom: false,      // true once the user edits velocity or B.C.
     barrel: null,       // { len, ref, rate } in inches and fps per inch; see resetBarrel()
     windMph: windPref(), // crosswind for the drift columns, kept in mph whatever the units
+    windClock: clockPref(), // where the wind comes from, 1-12 o'clock (3 = from the right)
+    table: tablePrefs(),    // trajectory table extent per firearm: { max, step } in the displayed distance unit
     result: null
   };
   const metric = () => state.units === 'metric';
@@ -268,16 +284,37 @@
     return r;
   }
 
-  // Trajectory table rows in display units: standard ranges for the firearm type plus the zero range.
-  const TABLE_RANGES = { rifle: [25, 50, 100, 150, 200, 250, 300], pistol: [10, 25, 50, 75, 100, 125, 150], shotgun: [10, 25, 50, 75, 100, 125, 150] };
+  // Table ranges in display units: every `step` out to `max`, a short first row when the step is longer, and the zero.
+  // Returns at most TABLE_ROWS ranges; `cut` says the list was shortened.
+  function tableRanges(zero) {
+    const t = state.table[state.mode], short = TABLE_SHORT[state.mode], out = [];
+    if (short < t.step) out.push(short);
+    for (let d = t.step; d <= t.max + 1e-9; d += t.step) out.push(d);
+    const all = Array.from(new Set(out.concat(zero))).sort((a, b) => a - b);
+    const list = all.slice(0, TABLE_ROWS);
+    if (!list.includes(zero)) list[list.length - 1] = zero;   // the zero row always shows
+    return { list: list.sort((a, b) => a - b), cut: all.length > TABLE_ROWS };
+  }
+
+  // Wind from 1-5 o'clock comes from the right and pushes the bullet left; 7-11 o'clock pushes it right.
+  // Only the crosswind part counts: full at 3 and 9 o'clock, none at 12 and 6.
+  function windFactor() { return Math.abs(Math.sin(state.windClock * Math.PI / 6)); }
+  function driftSide() {
+    if (!state.windMph || state.windClock % 6 === 0) return '';
+    return state.windClock < 6 ? 'left' : 'right';
+  }
+
   function trajectoryRows(angle, sightIn, zero, zeroYd) {
-    const disp = Array.from(new Set(TABLE_RANGES[state.mode].concat(zero))).sort((a, b) => a - b);
+    const ranges = tableRanges(zero), disp = ranges.list;
+    state.tableCut = ranges.cut;
     const toYd = d => (metric() ? d / BTS.METERS_PER_YARD : d);
     const grains = state.lists.weights[idx(el.weight)].grains;
+    const windMph = state.windMph * windFactor();
     return BTS.trajectoryTable(state.vFps, state.bc, sightIn, angle, disp.map(toYd)).map((p, i) => {
-      const rangeYd = toYd(disp[i]), driftIn = BTS.windDriftIn(state.windMph, rangeYd, p.t, state.vFps);
+      const rangeYd = toYd(disp[i]), driftIn = BTS.windDriftIn(windMph, rangeYd, p.t, state.vFps);
       return {
         range: disp[i],
+        rangeYd,
         zero: disp[i] === zero,
         path: metric() ? p.y * BTS.CM_PER_INCH : p.y,
         pathMoa: BTS.angleOf(p.y, rangeYd, 'moa'), pathMil: BTS.angleOf(p.y, rangeYd, 'mil'),
@@ -302,8 +339,14 @@
 
   // Shared by the page and the printed report: header cells and one row's cells (the first cell is the range).
   const signed = (v, digits) => (Math.abs(v) < 0.5 * Math.pow(10, -digits) ? (0).toFixed(digits) : (v > 0 ? '+' : '−') + Math.abs(v).toFixed(digits));
-  function trajectoryHead(u) {
-    return `<tr><th></th><th class="grp sep" colspan="3">Bullet vs. sight line</th><th class="grp sep" colspan="3">Drift, ${windDisplay()} ${u.w} wind</th><th class="sep" colspan="3"></th></tr>` +
+  function windText(u) {
+    const side = driftSide();
+    return side ? `${windDisplay()} ${u.w} from ${state.windClock} o'clock` : 'no crosswind';
+  }
+  // The page shows the wind in the controls above the table, so its header only names the direction.
+  function trajectoryHead(u, withWind) {
+    const side = driftSide(), label = withWind ? `Drift${side ? ' ' + side : ''}, ${windText(u)}` : (side ? 'Drift ' + side : 'Drift (no crosswind)');
+    return `<tr><th></th><th class="grp sep" colspan="3">Bullet vs. sight line</th><th class="grp sep" colspan="3">${label}</th><th class="sep" colspan="3"></th></tr>` +
       `<tr><th>Range (${u.d})</th><th class="sep">${u.h}</th><th>MOA</th><th>mil</th><th class="sep">${u.h}</th><th>MOA</th><th>mil</th>` +
       `<th class="sep">Velocity (${u.v})</th><th>Energy (${u.e})</th><th>Time (s)</th></tr>`;
   }
@@ -322,12 +365,19 @@
     });
     el.trajTable.innerHTML = h + '</tbody>';
     el.trajNote.textContent = (r.nearZero != null ? `Near zero ${r.nearZero.toFixed(1)} ${u.d} · ` : '') + `Max rise ${riseText(r.rise)}`;
+    el.trajHint.textContent = (state.tableCut ? `Showing the first ${TABLE_ROWS} ranges; choose a longer step to see farther. ` : '') +
+      'MOA and mil are from the line of sight. 3 and 9 o\'clock winds push the bullet the most; 12 and 6 o\'clock winds don\'t push it sideways.';
   }
 
-  // Shows the crosswind in the current units (the stored value stays in mph).
+  // Shows the crosswind and table extent in the current units (the wind is stored in mph).
   function showWind() {
-    el.windUnit.textContent = trajectoryUnits().w;
+    const u = trajectoryUnits(), t = state.table[state.mode];
+    el.windUnit.textContent = u.w;
     if (document.activeElement !== el.wind) el.wind.value = String(windDisplay());
+    el.windClock.value = String(state.windClock);
+    document.querySelectorAll('.t-dist').forEach(s => { s.textContent = u.d; });
+    if (document.activeElement !== el.tMax) el.tMax.value = String(t.max);
+    el.tStep.value = String(t.step);
   }
 
   // ---------- Click calculator ----------
@@ -396,7 +446,7 @@
     el.error.hidden = ok;
     el.error.innerHTML = r.error || '';
     el.solution.hidden = !ok;
-    el.printTarget.disabled = el.printReport.disabled = el.printSightin.disabled = !ok;
+    el.printTarget.disabled = el.printReport.disabled = el.printSightin.disabled = el.printCard.disabled = !ok;
     document.getElementById('traj-card').hidden = !ok;
     // The calculator's shot distance follows the zero range until the user types their own.
     if (!el.cRange.dataset.edited) el.cRange.value = String(r.zero);
@@ -787,6 +837,53 @@
     return `<div class="sheet">${s}</div>`;
   }
 
+  // Range card: scope clicks for each table range on a card to cut out (3 x 5 in, or 4 x 6 in for long tables).
+  function cardSheet(paper) {
+    const r = state.result, u = trajectoryUnits(), rows = r.table;
+    const [unit, value] = el.cClick.value.split(':'), click = Number(value), uName = unit === 'mil' ? 'mil' : 'MOA';
+    const clickLabel = el.cClick.selectedOptions[0] ? el.cClick.selectedOptions[0].textContent : value + ' ' + uName;
+    const big = rows.length > 14, cols = rows.length > 20 ? 2 : 1;
+    const CW = big ? 6 : 5, CH = big ? 4 : 3, x0 = 0.5, y0 = 0.5, pad = 0.16;
+    const w = state.lists.weights[idx(el.weight)], s = state.lists.shapes[idx(el.shape)];
+    const v = metric() ? BTS.roundHalfEven(r.vFps / FPS_PER_MPS) + ' m/s' : BTS.roundHalfEven(r.vFps) + ' fps';
+    const side = driftSide(), dialWind = side === 'left' ? 'R' : 'L';
+    let g = `<rect x="${x0}" y="${y0}" width="${CW}" height="${CH}" fill="#fff" stroke="#888" stroke-width="0.01" stroke-dasharray="0.08 0.05"/>`;
+    const tx = x0 + pad, tw = CW - 2 * pad;
+    g += `<text x="${tx}" y="${y0 + pad + 0.11}" font-size="0.13" font-weight="700">${esc(BTS.calibers(state.mode)[idx(el.caliber)])}</text>`;
+    g += `<text x="${tx + tw}" y="${y0 + pad + 0.11}" text-anchor="end" font-size="0.085" fill="#444">Zero ${r.zero} ${u.d} · sight ${r.sight.value.toFixed(1)} ${metric() ? 'cm' : 'in'}</text>`;
+    g += `<text x="${tx}" y="${y0 + pad + 0.26}" font-size="0.085" fill="#333">${esc(w.label + ' ' + s.label)} · ${v} · G1 B.C. ${r.bc.toFixed(3)}</text>`;
+    g += `<text x="${tx}" y="${y0 + pad + 0.39}" font-size="0.085" fill="#333">Clicks to dial at ${esc(clickLabel)} · wind ${esc(windText(u))}</text>`;
+    // Table: range, elevation (clicks and angle), windage (clicks and angle), one or two column groups.
+    const top = y0 + pad + 0.58, bottom = y0 + CH - pad - 0.08, perCol = Math.ceil(rows.length / cols);
+    const rowH = Math.min(0.2, (bottom - top - 0.2) / perCol), fs = Math.min(0.105, rowH * 0.62);
+    const gw = Math.min(4.7, (tw - (cols - 1) * 0.2) / cols);   // a single column doesn't spread across a wide card
+    const cx = [0.13, 0.42, 0.62, 0.84, 1].map(f => f * gw);   // right edges of the columns, as fractions of a group
+    const clicksOf = (angle, dirs) => {
+      const n = Math.round(Math.abs(angle) / click);
+      return n === 0 ? '0' : n + ' ' + (angle < 0 ? dirs[0] : dirs[1]);
+    };
+    for (let c = 0; c < cols; c++) {
+      const gx = tx + c * (gw + 0.2), part = rows.slice(c * perCol, (c + 1) * perCol);
+      const head = [`${u.d}`, 'Elev', uName, 'Wind', uName];
+      head.forEach((h, i) => { g += `<text x="${i === 0 ? gx : gx + cx[i]}" y="${top + 0.1}" text-anchor="${i === 0 ? 'start' : 'end'}" font-size="${fs * 0.9}" font-weight="700" fill="#555">${h}</text>`; });
+      g += `<line x1="${gx}" y1="${top + 0.15}" x2="${gx + gw}" y2="${top + 0.15}" stroke="#999" stroke-width="0.008"/>`;
+      part.forEach((row, k) => {
+        const y = top + 0.15 + (k + 1) * rowH - rowH * 0.28;
+        if (row.zero) g += `<rect x="${gx}" y="${top + 0.15 + k * rowH}" width="${gw}" height="${rowH}" fill="#e8f6f3"/>`;
+        else if (k % 2) g += `<rect x="${gx}" y="${top + 0.15 + k * rowH}" width="${gw}" height="${rowH}" fill="#f4f6f8"/>`;
+        const pathA = unit === 'mil' ? row.pathMil : row.pathMoa, driftA = unit === 'mil' ? row.driftMil : row.driftMoa;
+        // Bullet low (negative) means dial up; drift to one side means dial the other way.
+        const cells = [String(row.range), clicksOf(pathA, ['U', 'D']), Math.abs(pathA).toFixed(unit === 'mil' ? 2 : 1),
+          side ? clicksOf(driftA, [dialWind, dialWind]) : '0', Math.abs(driftA).toFixed(unit === 'mil' ? 2 : 1)];
+        cells.forEach((t, i) => { g += `<text x="${i === 0 ? gx + 0.03 : gx + cx[i]}" y="${y}" text-anchor="${i === 0 ? 'start' : 'end'}" font-size="${fs}"${row.zero ? ' font-weight="700"' : ''}>${t}</text>`; });
+      });
+    }
+    g += `<text x="${tx}" y="${y0 + CH - pad + 0.02}" font-size="0.07" fill="#666">U/D = dial up/down, L/R = dial left/right. Standard atmosphere; confirm with live fire.</text>`;
+    return `<div class="sheet"><svg xmlns="http://www.w3.org/2000/svg" width="${paper.w}in" height="${paper.h}in" viewBox="0 0 ${paper.w} ${paper.h}" font-family="Arial, Helvetica, sans-serif">` +
+      `<rect width="${paper.w}" height="${paper.h}" fill="#fff"/>${g}` +
+      `<text x="${x0}" y="${y0 + CH + 0.3}" font-size="0.11" fill="#555">Cut along the dashed line (${CW} × ${CH} in). Print at 100% / Actual size.</text></svg></div>`;
+  }
+
   function reportSheet(paper) {
     const r = state.result, u = trajectoryUnits();
     const light = { grid: '#d9dee5', axis: '#5f6b7a', tick: '#444', title: '#222', los: '#1f6fe5', path: '#b07d0b', laser: '#e0283d', accent: '#0f9d8a', bg: '#fff' };
@@ -799,9 +896,18 @@
     const half = Math.ceil(all.length / 2);
     const tbl = list => `<table>${list.map(rw => `<tr><th>${esc(rw[0])}</th><td>${esc(rw[1])}</td></tr>`).join('')}</table>`;
     const rows = `<div class="report-cols">${tbl(all.slice(0, half))}${tbl(all.slice(half))}</div>`;
-    const traj = `<table class="report-traj">${trajectoryHead(u)}` +
+    // Up to REPORT_ROWS ranges fit under the chart; a longer table goes on a second page.
+    const REPORT_ROWS = 9, second = r.table.length > REPORT_ROWS;
+    const traj = `<table class="report-traj${r.table.length > 24 ? ' dense' : ''}">${trajectoryHead(u, true)}` +
       r.table.map(row => `<tr${row.zero ? ' class="zero-row"' : ''}><td>${row.range}${row.zero ? ' (zero)' : ''}</td>${trajectoryCells(row, '')}</tr>`).join('') + '</table>';
     const unitD = u.d;
+    const footer = `<footer>G1 point-mass model, standard atmosphere (59 °F, 29.53 inHg). Printed ${esc(new Date().toLocaleString())}. Confirm your zero with live fire.</footer>`;
+    const page2 = !second ? '' : `<div class="sheet report" style="width:${paper.w}in;height:${paper.h}in">
+      <header><div><h1>Boresight Report · trajectory</h1><p>${esc(BTS.calibers(state.mode)[idx(el.caliber)])} · zeroed at ${r.zero} ${unitD} · ${esc(state.lists.weights[idx(el.weight)].label)} ${esc(state.lists.shapes[idx(el.shape)].label)}</p></div></header>
+      ${traj}
+      <p class="report-note">MOA and mil are from the line of sight. Drift is for ${esc(windText(u))}.</p>
+      ${footer}
+    </div>`;
     return `<div class="sheet report" style="width:${paper.w}in;height:${paper.h}in">
       <header><svg viewBox="0 0 32 32" width="34" height="34"><circle cx="16" cy="16" r="11" fill="none" stroke="#0f9d8a" stroke-width="2.5"/><path d="M16 1v8M16 23v8M1 16h8M23 16h8" stroke="#0f9d8a" stroke-width="2.5"/><circle cx="16" cy="16" r="3" fill="#e0283d"/></svg>
       <div><h1>Boresight Report</h1><p>${esc(BTS.calibers(state.mode)[idx(el.caliber)])} · zeroed at ${r.zero} ${unitD}</p></div>
@@ -811,15 +917,15 @@
       <p class="report-legend"><span style="color:#1f6fe5">━ Line of sight</span><span style="color:#b07d0b">━ Bullet path</span><span style="color:#e0283d">━ Laser beam</span></p>
       ${rows}
       <h2>Trajectory</h2>
-      ${traj}
+      ${second ? `<p>The trajectory table (${r.table.length} ranges, out to ${r.table[r.table.length - 1].range} ${unitD}) is on page 2.</p>` : traj}
       <h2>Aligning the sight at the meet distance</h2>
       <ul>
         <li><strong>Scope:</strong> center the crosshair on the laser spot.</li>
         <li><strong>Open sights:</strong> hold the laser spot just on top of the front post, level with the rear notch.</li>
         <li><strong>Red dot or holographic:</strong> put the dot on the laser spot.</li>
       </ul>
-      <footer>G1 point-mass model, standard atmosphere (59 °F, 29.53 inHg). Printed ${esc(new Date().toLocaleString())}. Confirm your zero with live fire.</footer>
-    </div>`;
+      ${footer}
+    </div>${page2}`;
   }
 
   function print(kind) {
@@ -831,7 +937,7 @@
     el.printRoot.innerHTML = SHEETS[kind](paper);
     window.print();
   }
-  const SHEETS = { target: targetSheet, report: reportSheet, sightin: sightinSheet };
+  const SHEETS = { target: targetSheet, report: reportSheet, sightin: sightinSheet, card: cardSheet };
   window.addEventListener('afterprint', () => { el.printRoot.innerHTML = ''; });
 
   // ---------- Events ----------
@@ -886,10 +992,40 @@
     if (!(v >= 0 && v < 1000)) return;
     state.windMph = metric() ? v / KMH_PER_MPH : v;
     savePref('wind', String(state.windMph));
-    const r = state.result;
-    if (r && !r.error) { r.table = trajectoryRows(r.angle, r.sightIn, r.zero, r.zeroYd); renderTable(); }
+    refreshTable();
   });
   el.wind.addEventListener('blur', showWind);
+  for (let h = 1; h <= 12; h++) {
+    const o = document.createElement('option');
+    o.value = String(h); o.textContent = h + " o'clock";
+    el.windClock.appendChild(o);
+  }
+  el.windClock.addEventListener('change', () => {
+    state.windClock = Number(el.windClock.value);
+    savePref('windclock', String(state.windClock));
+    refreshTable();
+  });
+  // Table extent, remembered per firearm type.
+  function setTable(max, step) {
+    const t = state.table[state.mode];
+    if (max != null) t.max = max;
+    if (step != null) t.step = step;
+    savePref('table.' + state.mode, t.max + ':' + t.step);
+    refreshTable();
+  }
+  el.tMax.addEventListener('input', () => {
+    const v = parseFloat(el.tMax.value);
+    if (v >= 10 && v <= TABLE_MAX) setTable(v, null);
+  });
+  el.tMax.addEventListener('blur', showWind);
+  el.tStep.addEventListener('change', () => setTable(null, Number(el.tStep.value)));
+  el.printCard.addEventListener('click', () => print('card'));
+
+  // Rebuilds only the trajectory table (wind and table settings don't change the boresight solution).
+  function refreshTable() {
+    const r = state.result;
+    if (r && !r.error) { r.table = trajectoryRows(r.angle, r.sightIn, r.zero, r.zeroYd); renderTable(); }
+  }
 
   el.barrelOn.addEventListener('change', () => {
     state.barrel.on = el.barrelOn.checked;
@@ -1101,7 +1237,7 @@
   // index.html#preview-target or #preview-report shows a printable sheet on screen.
   // An optional @range picks a target range, e.g. #preview-target@10.
   function showPreview(hash) {
-    const m = hash.match(/^#preview-(target|report|sightin)(?:@(\d+))?$/) || [];
+    const m = hash.match(/^#preview-(target|report|sightin|card)(?:@(\d+))?$/) || [];
     const kind = m[1];
     document.body.classList.toggle('previewing', !!kind);
     if (m[2]) {
