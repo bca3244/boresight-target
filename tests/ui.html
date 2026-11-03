@@ -86,26 +86,36 @@ function set(d, id, value, ev = 'input') { const e = d.getElementById(id); e.val
   }
 
   // Barrel length: 16 in barrel on the default 308 (test barrel 24 in, 25 fps per in) = 200 fps slower.
+  // A code is 12 characters, + 6 for your own load, + 7 for the barrel, so only the length tells whether a barrel is in it.
+  const hasBarrel = h => (h.length - 1 - 12) % 6 === 1;
   {
     await load('');
     const d2 = frame.contentDocument, w2 = frame.contentWindow;
     const v0 = Number(d2.getElementById('velocity').value);
+    row('Barrel adjustment is off by default', 'unchecked, fields hidden', (d2.getElementById('barrel-on').checked ? 'checked' : 'unchecked') + (d2.getElementById('barrel-row').hidden ? ', fields hidden' : ', fields shown'),
+        !d2.getElementById('barrel-on').checked && d2.getElementById('barrel-row').hidden);
+    d2.getElementById('barrel-on').click();
+    row('Checking it shows the defaults', 'test 24, 25 per in', `test ${d2.getElementById('barrel-ref').value}, ${d2.getElementById('barrel-rate').value} per in` + (d2.getElementById('barrel-row').hidden ? ' (hidden)' : ''),
+        !d2.getElementById('barrel-row').hidden && d2.getElementById('barrel-ref').value === '24' && d2.getElementById('barrel-rate').value === '25');
     set(d2, 'barrel-len', '16');
     const v1 = Number(d2.getElementById('velocity').value);
     row('16 in barrel lowers velocity by 200 fps', (v0 - 200) + ' fps', v1 + ' fps', v1 === v0 - 200);
     row('Barrel note explains the change', 'lowered by 200 fps', d2.getElementById('barrel-note').textContent, /lowered by 200 fps/.test(d2.getElementById('barrel-note').textContent));
     const hash = w2.location.hash;
-    row('Barrel goes into the share link', '…b…', hash, /b[0-9a-z]{6}$/.test(hash));
+    row('Barrel goes into the share link', '…b…', hash, hasBarrel(hash) && /b[0-9a-z]{6}$/.test(hash));
+    d2.getElementById('barrel-on').click();
+    row('Unchecking removes the adjustment', v0 + ' fps, no barrel in link', d2.getElementById('velocity').value + ' fps' + (hasBarrel(w2.location.hash) ? ', barrel still in link' : ', no barrel in link'),
+        Number(d2.getElementById('velocity').value) === v0 && !hasBarrel(w2.location.hash));
     await load(hash);
     const d3 = frame.contentDocument;
-    row('Link restores the barrel and velocity', '16 / ' + (v0 - 200), d3.getElementById('barrel-len').value + ' / ' + d3.getElementById('velocity').value,
-        d3.getElementById('barrel-len').value === '16' && Number(d3.getElementById('velocity').value) === v0 - 200);
+    row('Link restores the barrel (checked) and velocity', 'checked, 16 / ' + (v0 - 200), (d3.getElementById('barrel-on').checked ? 'checked, ' : 'unchecked, ') + d3.getElementById('barrel-len').value + ' / ' + d3.getElementById('velocity').value,
+        d3.getElementById('barrel-on').checked && d3.getElementById('barrel-len').value === '16' && Number(d3.getElementById('velocity').value) === v0 - 200);
     set(d3, 'velocity', '2700');
     row('Own velocity is not adjusted', '2700 and a note', d3.getElementById('velocity').value + ' · ' + d3.getElementById('barrel-note').textContent.slice(0, 40),
         d3.getElementById('velocity').value === '2700' && /isn’t applied/.test(d3.getElementById('barrel-note').textContent));
     d3.querySelector('[data-mode="pistol"]').click();
-    row('Pistol resets barrel to a 4 in test barrel', 'empty / 4', (d3.getElementById('barrel-len').value || 'empty') + ' / ' + d3.getElementById('barrel-ref').value,
-        d3.getElementById('barrel-len').value === '' && d3.getElementById('barrel-ref').value === '4');
+    row('Pistol resets barrel: off, 4 in test barrel', 'unchecked, empty / 4', (d3.getElementById('barrel-on').checked ? 'checked, ' : 'unchecked, ') + (d3.getElementById('barrel-len').value || 'empty') + ' / ' + d3.getElementById('barrel-ref').value,
+        !d3.getElementById('barrel-on').checked && d3.getElementById('barrel-len').value === '' && d3.getElementById('barrel-ref').value === '4');
     d3.querySelector('[data-mode="shotgun"]').click();
     row('Shotgun hides the barrel fields', 'hidden', d3.getElementById('barrel-field').hidden ? 'hidden' : 'shown', d3.getElementById('barrel-field').hidden);
     await load('');

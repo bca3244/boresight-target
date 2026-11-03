@@ -19,7 +19,7 @@
     cElev: $('c-elev'), cElevSub: $('c-elev-sub'), cWind: $('c-wind'), cWindSub: $('c-wind-sub'),
     printSightin: $('print-sightin'), gridToggle: $('grid-toggle'),
     barrelField: $('barrel-field'), barrelLen: $('barrel-len'), barrelRef: $('barrel-ref'), barrelRate: $('barrel-rate'),
-    barrelRateUnit: $('b-rate-unit'), barrelNote: $('barrel-note')
+    barrelRateUnit: $('b-rate-unit'), barrelNote: $('barrel-note'), barrelOn: $('barrel-on'), barrelRow: $('barrel-row')
   };
 
   const DEFAULTS = {
@@ -153,19 +153,22 @@
   const BARREL_RATE_FPS_PER_IN = 25;
   const MPS_PER_CM_PER_FPS_PER_IN = 0.3048 / 2.54;
 
+  // Off by default; turning it on shows the fields with the test barrel and change per inch already filled in.
   function resetBarrel() {
-    state.barrel = { len: null, ref: BARREL_REF_IN[state.mode] || 24, rate: BARREL_RATE_FPS_PER_IN };
+    state.barrel = { on: false, len: null, ref: BARREL_REF_IN[state.mode] || 24, rate: BARREL_RATE_FPS_PER_IN };
   }
 
   function barrelAdjustFps() {
     const b = state.barrel;
-    if (state.mode === 'shotgun' || !b || b.len == null) return 0;
+    if (state.mode === 'shotgun' || !b || !b.on || b.len == null) return 0;
     return Math.round((b.len - b.ref) * b.rate);
   }
 
   function showBarrel() {
     const b = state.barrel, cm = metric();
     el.barrelField.hidden = state.mode === 'shotgun';
+    el.barrelOn.checked = b.on;
+    el.barrelRow.hidden = el.barrelNote.hidden = !b.on;
     document.querySelectorAll('.b-len').forEach(s => { s.textContent = cm ? 'cm' : 'in'; });
     el.barrelRateUnit.textContent = cm ? 'm/s' : 'fps';
     const len = v => (cm ? +(v * 2.54).toFixed(1) : +v.toFixed(1));
@@ -179,8 +182,8 @@
     const b = state.barrel, adj = barrelAdjustFps(), cm = metric();
     const lenTxt = v => (cm ? (v * 2.54).toFixed(1) + ' cm' : +v.toFixed(1) + ' in');
     const vTxt = v => (cm ? Math.round(Math.abs(v) * 0.3048) + ' m/s' : Math.abs(v) + ' fps');
-    el.barrelNote.classList.toggle('adjusting', b.len != null && !state.custom && adj !== 0);
-    if (b.len == null) el.barrelNote.textContent = `Typical velocities assume a ${lenTxt(b.ref)} test barrel. Rule of thumb: about 25 fps per inch for most rifle cartridges, more for magnums.`;
+    el.barrelNote.classList.toggle('adjusting', b.on && b.len != null && !state.custom && adj !== 0);
+    if (b.len == null) el.barrelNote.textContent = `Enter your barrel length. Typical velocities assume a ${lenTxt(b.ref)} test barrel; about 25 fps per inch is a common rule of thumb, more for magnums.`;
     else if (state.custom) el.barrelNote.textContent = 'You entered your own velocity, so the barrel adjustment isn’t applied. Use typical values to apply it.';
     else if (adj === 0) el.barrelNote.textContent = `Your ${lenTxt(b.len)} barrel matches the test barrel; no adjustment.`;
     else el.barrelNote.textContent = `Velocity ${adj < 0 ? 'lowered' : 'raised'} by ${vTxt(adj)} for your ${lenTxt(b.len)} barrel (test barrel ${lenTxt(b.ref)}).`;
@@ -405,7 +408,7 @@
       code += b36(metric() ? state.vFps / FPS_PER_MPS : state.vFps, 3) + b36(state.bc * 1000, 3);
     }
     const b = state.barrel;
-    if (b && b.len != null && state.mode !== 'shotgun') code += 'b' + b36(b.len * 10, 2) + b36(b.ref * 10, 2) + b36(b.rate, 2);
+    if (b && b.on && b.len != null && state.mode !== 'shotgun') code += 'b' + b36(b.len * 10, 2) + b36(b.ref * 10, 2) + b36(b.rate, 2);
     return code;
   }
 
@@ -443,7 +446,7 @@
     buildShapes(null); pick(el.shape, n(m[5]));
     buildZeros(null); pick(el.zero, n(m[6]));
     resetBarrel();
-    if (m[10]) state.barrel = { len: n(m[10]) / 10, ref: n(m[11]) / 10 || state.barrel.ref, rate: n(m[12]) };
+    if (m[10]) state.barrel = { on: true, len: n(m[10]) / 10, ref: n(m[11]) / 10 || state.barrel.ref, rate: n(m[12]) };
     showBarrel();
     if (m[8]) {
       const v = n(m[8]);
@@ -608,7 +611,7 @@
       ['Bullet weight', w.label],
       ['Bullet shape', s.label],
       ['Muzzle velocity', v + (state.custom ? '' : barrelAdjustFps() ? ' (typical, adjusted for barrel)' : ' (typical)')],
-      ...(state.barrel && state.barrel.len != null && state.mode !== 'shotgun' ? [['Barrel length', barrelText()]] : []),
+      ...(barrelAdjustFps() || (state.barrel && state.barrel.on && state.barrel.len != null && state.mode !== 'shotgun') ? [['Barrel length', barrelText()]] : []),
       ['G1 B.C.', r.bc.toFixed(3) + (state.custom ? '' : ' (typical)')],
       ['Zero range', r.zero + ' ' + unitD],
       ['Meet distance', r.meet.toFixed(1) + ' ' + unitD],
@@ -812,6 +815,18 @@
     render();
   }
 
+  el.barrelOn.addEventListener('change', () => {
+    state.barrel.on = el.barrelOn.checked;
+    if (state.barrel.on) {
+      // Fill the defaults back in if they were cleared, then start on "your barrel".
+      if (!(parseFloat(el.barrelRef.value) > 0)) state.barrel.ref = BARREL_REF_IN[state.mode] || 24;
+      if (!(parseFloat(el.barrelRate.value) >= 0)) state.barrel.rate = BARREL_RATE_FPS_PER_IN;
+    }
+    showBarrel();
+    if (state.barrel.on) el.barrelLen.focus();
+    if (!state.custom) setTypicalLoad();
+    render(keepTargetValue());
+  });
   [el.barrelLen, el.barrelRef, el.barrelRate].forEach(i => i.addEventListener('input', () => {
     readBarrel();
     if (!state.custom) setTypicalLoad(); else showBarrelNote();
