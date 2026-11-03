@@ -126,6 +126,25 @@
       </div>
       <p class="hint load-hint"><span id="load-note">Typical values for this load.</span> <button type="button" id="reset-load" class="link" hidden>Use typical values</button></p>
 
+      <div class="field barrel" id="barrel-field">
+        <span class="field-label">Barrel length <span class="optional">optional</span></span>
+        <div class="barrel-row">
+          <label class="mini">
+            <span>Your barrel</span>
+            <span class="input-unit"><input id="barrel-len" type="number" inputmode="decimal" min="1" step="0.5" placeholder="same as test"><span class="b-len">in</span></span>
+          </label>
+          <label class="mini">
+            <span>Test barrel</span>
+            <span class="input-unit"><input id="barrel-ref" type="number" inputmode="decimal" min="1" step="0.5"><span class="b-len">in</span></span>
+          </label>
+          <label class="mini">
+            <span>Change per <span class="b-len">in</span></span>
+            <span class="input-unit"><input id="barrel-rate" type="number" inputmode="decimal" min="0" step="1"><span id="b-rate-unit">fps</span></span>
+          </label>
+        </div>
+        <span class="hint" id="barrel-note">Typical velocities assume the test barrel length. Rule of thumb: about 25 fps per inch for most rifle cartridges, more for magnums.</span>
+      </div>
+
       <label class="field">
         <span class="field-label"><span class="step">6</span>Zero range</span>
         <select id="zero"></select>

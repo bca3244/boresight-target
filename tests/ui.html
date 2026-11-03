@@ -85,10 +85,45 @@ function set(d, id, value, ev = 'input') { const e = d.getElementById(id); e.val
     row('Delete removes it', 'No saved setups yet', sel('saved-list'), sel('saved-list') === 'No saved setups yet');
   }
 
+  // Barrel length: 16 in barrel on the default 308 (test barrel 24 in, 25 fps per in) = 200 fps slower.
+  {
+    await load('');
+    const d2 = frame.contentDocument, w2 = frame.contentWindow;
+    const v0 = Number(d2.getElementById('velocity').value);
+    set(d2, 'barrel-len', '16');
+    const v1 = Number(d2.getElementById('velocity').value);
+    row('16 in barrel lowers velocity by 200 fps', (v0 - 200) + ' fps', v1 + ' fps', v1 === v0 - 200);
+    row('Barrel note explains the change', 'lowered by 200 fps', d2.getElementById('barrel-note').textContent, /lowered by 200 fps/.test(d2.getElementById('barrel-note').textContent));
+    const hash = w2.location.hash;
+    row('Barrel goes into the share link', '…b…', hash, /b[0-9a-z]{6}$/.test(hash));
+    await load(hash);
+    const d3 = frame.contentDocument;
+    row('Link restores the barrel and velocity', '16 / ' + (v0 - 200), d3.getElementById('barrel-len').value + ' / ' + d3.getElementById('velocity').value,
+        d3.getElementById('barrel-len').value === '16' && Number(d3.getElementById('velocity').value) === v0 - 200);
+    set(d3, 'velocity', '2700');
+    row('Own velocity is not adjusted', '2700 and a note', d3.getElementById('velocity').value + ' · ' + d3.getElementById('barrel-note').textContent.slice(0, 40),
+        d3.getElementById('velocity').value === '2700' && /isn’t applied/.test(d3.getElementById('barrel-note').textContent));
+    d3.querySelector('[data-mode="pistol"]').click();
+    row('Pistol resets barrel to a 4 in test barrel', 'empty / 4', (d3.getElementById('barrel-len').value || 'empty') + ' / ' + d3.getElementById('barrel-ref').value,
+        d3.getElementById('barrel-len').value === '' && d3.getElementById('barrel-ref').value === '4');
+    d3.querySelector('[data-mode="shotgun"]').click();
+    row('Shotgun hides the barrel fields', 'hidden', d3.getElementById('barrel-field').hidden ? 'hidden' : 'shown', d3.getElementById('barrel-field').hidden);
+    await load('');
+  }
+
   // Collapsible cards: chevron and title both toggle, the state is remembered, and the chart redraws on reopen.
   {
+    const d = frame.contentDocument, w = frame.contentWindow;   // the barrel checks above reloaded the page
     const cards = Array.from(d.querySelectorAll('[data-collapse]'));
     row('Every main card is collapsible', '5 cards with a chevron', cards.filter(c => c.querySelector('.fold-btn')).length + ' cards', cards.length === 5 && cards.every(c => c.querySelector('.fold-btn')));
+    // Each card's body must actually disappear when folded (a card-specific style once kept the click calculator open).
+    const stuck = cards.filter(c => {
+      c.querySelector('.fold-btn').click();
+      const gone = getComputedStyle(c.querySelector('.card-body')).display === 'none';
+      c.querySelector('.fold-btn').click();
+      return !gone;
+    }).map(c => c.dataset.collapse);
+    row('Every card body hides when folded', 'all hide', stuck.length ? 'stays visible: ' + stuck.join(', ') : 'all hide', stuck.length === 0);
     const chart = d.querySelector('.chart-card');
     chart.querySelector('.fold-btn').click();
     const hidden = getComputedStyle(chart.querySelector('.card-body')).display === 'none';

@@ -189,12 +189,22 @@ h2.card-head { flex-wrap: nowrap; }
 .fold-btn:hover { background: var(--surface-3); color: var(--text); }
 .fold-btn svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; transform: rotate(180deg); transition: transform 0.2s; }
 .card.collapsed .fold-btn svg { transform: none; }
-.card.collapsed .card-body { display: none; }
+/* !important: some cards give their body a display of their own (e.g. #clicks-card), which would otherwise win. */
+.card.collapsed .card-body { display: none !important; }
 .setup .card-body, .hero .card-body, #clicks-card .card-body { display: grid; gap: 16px; }
 .hero .card-body { gap: 14px; }
 #clicks-card .card-body { gap: 12px; }
 .chart-card.maximized .fold-btn { display: none; }
 .chart-card.maximized .card-body { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+
+/* ---------- Barrel length ---------- */
+.barrel-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.mini { display: grid; gap: 4px; min-width: 0; }
+.mini > span:first-child { font-size: 12px; color: var(--faint); }
+.mini .input-unit input { padding-right: 40px; }
+.optional { font-size: 11px; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--faint); }
+#barrel-note.adjusting { color: var(--path); }
+.barrel[hidden] { display: none; }
 
 /* ---------- Caliber search ---------- */
 .search { position: relative; display: block; }
