@@ -4,7 +4,7 @@ A web page that prints a true-scale laser boresight target for your firearm, sig
 
 - Pick a rifle, pistol or shotgun, the caliber, sight height, bullet weight and shape, and the zero range.
 - The page works out where the laser (which follows the bore) crosses the line of sight, and how far below the aim point the laser spot sits at a closer target range.
-- Print a boresight target (Letter or A4, optional measuring grid, 1 in and 5 cm bars for checking the scale), a 1-inch-grid sight-in target for the first shots, or a one-page report with a trajectory table.
+- Print a boresight target (Letter or A4, light measuring grid, 1 in and 5 cm bars for checking the scale), a 1-inch-grid sight-in target for the first shots, or a one-page report with a trajectory table.
 - After the first shots, enter how far the group is off and get the scope clicks (MOA or mil).
 - Adjust the typical velocity for your barrel length (test barrel length and change per inch are editable).
 - Search the caliber list, and save named setups in your browser.

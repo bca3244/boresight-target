@@ -17,7 +17,7 @@
     trajTable: $('traj-table'), trajNote: $('traj-note'), wind: $('wind'), windUnit: $('wind-unit'),
     cRange: $('c-range'), cClick: $('c-click'), cVert: $('c-vert'), cVdir: $('c-vdir'), cHoriz: $('c-horiz'), cHdir: $('c-hdir'),
     cElev: $('c-elev'), cElevSub: $('c-elev-sub'), cWind: $('c-wind'), cWindSub: $('c-wind-sub'),
-    printSightin: $('print-sightin'), gridToggle: $('grid-toggle'),
+    printSightin: $('print-sightin'),
     barrelField: $('barrel-field'), barrelLen: $('barrel-len'), barrelRef: $('barrel-ref'), barrelRate: $('barrel-rate'),
     barrelRateUnit: $('b-rate-unit'), barrelNote: $('barrel-note'), barrelOn: $('barrel-on'), barrelRow: $('barrel-row')
   };
@@ -667,8 +667,8 @@
     s += `<rect width="${W}" height="${H}" fill="#fff"/>`;
     s += `<text x="${W / 2}" y="0.55" text-anchor="middle" font-size="0.12" fill="#555">Boresight target · ${esc(BTS.calibers(state.mode)[idx(el.caliber)])}</text>`;
     s += `<text x="0.95" y="1.05" text-anchor="middle" font-size="0.34" font-weight="700">TOP</text><text x="${W - 0.95}" y="1.05" text-anchor="middle" font-size="0.34" font-weight="700">TOP</text>`;
-    // Optional light grid through the aim point: 1 in squares (1 cm in metric) for reading offsets.
-    if (el.gridToggle.checked) s += gridLines(cx, aimY, metric() ? 1 / 2.54 : 1, 0.45, 1.25, W - 0.45, fy - 0.45, '#d3d8de', 0.008);
+    // Light grid through the aim point: 1 in squares (1 cm in metric) for reading offsets.
+    s += gridLines(cx, aimY, metric() ? 1 / 2.54 : 1, 0.45, 1.25, W - 0.45, fy - 0.45, '#d3d8de', 0.008);
     // Aim point crosshair (the sight goes here).
     s += `<line x1="0.45" y1="${aimY}" x2="${W - 0.45}" y2="${aimY}" ${dash}/>`;
     s += `<line x1="${cx}" y1="0.85" x2="${cx}" y2="${fy - 0.4}" ${dash}/>`;
@@ -947,9 +947,6 @@
   [el.cVert, el.cHoriz, el.cVdir, el.cHdir].forEach(i => i.addEventListener('input', updateClicks));
   el.cClick.addEventListener('change', () => { savePref('click', el.cClick.value); updateClicks(); });
 
-  // Grid on the boresight target (remembered per browser).
-  el.gridToggle.checked = loadPref('grid', 'on') === 'on';
-  el.gridToggle.addEventListener('change', () => savePref('grid', el.gridToggle.checked ? 'on' : 'off'));
   el.printSightin.addEventListener('click', () => print('sightin'));
 
   // ---------- My setups: named share codes kept in this browser ----------
