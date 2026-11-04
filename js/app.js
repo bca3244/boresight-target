@@ -16,6 +16,7 @@
     savedName: $('saved-name'), savedSave: $('saved-save'), savedNote: $('saved-note'), savedCount: $('saved-count'),
     trajTable: $('traj-table'), trajNote: $('traj-note'), wind: $('wind'), windUnit: $('wind-unit'),
     windClock: $('wind-clock'), tMax: $('t-max'), tStep: $('t-step'), trajHint: $('traj-hint'), printCard: $('print-card'),
+    cardClick: $('card-click'), cardHint: $('card-hint'), cardPreview: $('card-preview'),
     cRange: $('c-range'), cClick: $('c-click'), cVert: $('c-vert'), cVdir: $('c-vdir'), cHoriz: $('c-horiz'), cHdir: $('c-hdir'),
     cElev: $('c-elev'), cElevSub: $('c-elev-sub'), cWind: $('c-wind'), cWindSub: $('c-wind-sub'),
     printSightin: $('print-sightin'),
@@ -367,6 +368,16 @@
     el.trajNote.textContent = (r.nearZero != null ? `Near zero ${r.nearZero.toFixed(1)} ${u.d} · ` : '') + `Max rise ${riseText(r.rise)}`;
     el.trajHint.textContent = (state.tableCut ? `Showing the first ${TABLE_ROWS} ranges; choose a longer step to see farther. ` : '') +
       'MOA and mil are from the line of sight. 3 and 9 o\'clock winds push the bullet the most; 12 and 6 o\'clock winds don\'t push it sideways.';
+    renderCard();
+  }
+
+  // The range card section shows the same drawing that prints, so it follows the table, wind and click size.
+  function renderCard() {
+    const c = cardDrawing(), m = 0.03;
+    el.cardPreview.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${c.x0 - m} ${c.y0 - m} ${c.w + 2 * m} ${c.h + 2 * m}" ` +
+      `style="max-width:${c.w + 2 * m}in" font-family="Arial, Helvetica, sans-serif" role="img" aria-label="Range card preview">${c.g}</svg>`;
+    el.cardHint.textContent = `Prints at ${c.w} × ${c.h} in on ${PAPER[state.paper].name} paper; cut along the dashed line. ` +
+      'The click size is shared with “Adjust after your first shots”.';
   }
 
   // Shows the crosswind and table extent in the current units (the wind is stored in mph).
@@ -447,7 +458,7 @@
     el.error.innerHTML = r.error || '';
     el.solution.hidden = !ok;
     el.printTarget.disabled = el.printReport.disabled = el.printSightin.disabled = el.printCard.disabled = !ok;
-    document.getElementById('traj-card').hidden = !ok;
+    document.getElementById('traj-card').hidden = document.getElementById('range-card').hidden = !ok;
     // The calculator's shot distance follows the zero range until the user types their own.
     if (!el.cRange.dataset.edited) el.cRange.value = String(r.zero);
     updateClicks();
@@ -838,7 +849,8 @@
   }
 
   // Range card: scope clicks for each table range on a card to cut out (3 x 5 in, or 4 x 6 in for long tables).
-  function cardSheet(paper) {
+  // cardDrawing() is the card itself (inch coordinates on the page); the screen preview and the printed sheet both use it.
+  function cardDrawing() {
     const r = state.result, u = trajectoryUnits(), rows = r.table;
     const [unit, value] = el.cClick.value.split(':'), click = Number(value), uName = unit === 'mil' ? 'mil' : 'MOA';
     const clickLabel = el.cClick.selectedOptions[0] ? el.cClick.selectedOptions[0].textContent : value + ' ' + uName;
@@ -879,9 +891,14 @@
       });
     }
     g += `<text x="${tx}" y="${y0 + CH - pad + 0.02}" font-size="0.07" fill="#666">U/D = dial up/down, L/R = dial left/right. Standard atmosphere; confirm with live fire.</text>`;
+    return { g, x0, y0, w: CW, h: CH };
+  }
+
+  function cardSheet(paper) {
+    const c = cardDrawing();
     return `<div class="sheet"><svg xmlns="http://www.w3.org/2000/svg" width="${paper.w}in" height="${paper.h}in" viewBox="0 0 ${paper.w} ${paper.h}" font-family="Arial, Helvetica, sans-serif">` +
-      `<rect width="${paper.w}" height="${paper.h}" fill="#fff"/>${g}` +
-      `<text x="${x0}" y="${y0 + CH + 0.3}" font-size="0.11" fill="#555">Cut along the dashed line (${CW} × ${CH} in). Print at 100% / Actual size.</text></svg></div>`;
+      `<rect width="${paper.w}" height="${paper.h}" fill="#fff"/>${c.g}` +
+      `<text x="${c.x0}" y="${c.y0 + c.h + 0.3}" font-size="0.11" fill="#555">Cut along the dashed line (${c.w} × ${c.h} in). Print at 100% / Actual size.</text></svg></div>`;
   }
 
   function reportSheet(paper) {
@@ -1077,11 +1094,21 @@
   el.zero.addEventListener('change', () => { delete el.cRange.dataset.edited; render(keepTargetValue()); });
 
   // Click calculator inputs.
+  // The range card has its own copy of the click-size list; both stay on the same value.
+  el.cardClick.innerHTML = el.cClick.innerHTML;
   el.cClick.value = loadPref('click', 'moa:0.25');
   if (!el.cClick.value) el.cClick.value = 'moa:0.25';
+  el.cardClick.value = el.cClick.value;
   el.cRange.addEventListener('input', () => { el.cRange.dataset.edited = '1'; updateClicks(); });
   [el.cVert, el.cHoriz, el.cVdir, el.cHdir].forEach(i => i.addEventListener('input', updateClicks));
-  el.cClick.addEventListener('change', () => { savePref('click', el.cClick.value); updateClicks(); });
+  function setClick(value) {
+    el.cClick.value = el.cardClick.value = value;
+    savePref('click', value);
+    updateClicks();
+    if (state.result && !state.result.error) renderCard();
+  }
+  el.cClick.addEventListener('change', () => setClick(el.cClick.value));
+  el.cardClick.addEventListener('change', () => setClick(el.cardClick.value));
 
   el.printSightin.addEventListener('click', () => print('sightin'));
 
@@ -1152,7 +1179,10 @@
     el.bc.addEventListener(ev, () => { readLoadInputs(); render(keepTargetValue()); });
   });
   el.resetLoad.addEventListener('click', () => { setTypicalLoad(); render(keepTargetValue()); });
-  el.paper.addEventListener('change', () => { state.paper = el.paper.value; savePref('paper', state.paper); syncUrl(); });
+  el.paper.addEventListener('change', () => {
+    state.paper = el.paper.value; savePref('paper', state.paper); syncUrl();
+    if (state.result && !state.result.error) renderCard();
+  });
   el.copyLink.addEventListener('click', copyLink);
   el.printTarget.addEventListener('click', () => print('target'));
   el.printReport.addEventListener('click', () => print('report'));

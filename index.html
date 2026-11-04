@@ -251,13 +251,28 @@
             <span>From</span>
             <select id="wind-clock"></select>
           </label>
-          <button type="button" class="btn" id="print-card" title="A small card of scope clicks for each range, to keep with the rifle">
+        </div>
+        <p class="hint traj-hint" id="traj-hint">MOA and mil are from the line of sight. 3 and 9 o'clock winds push the bullet the most; 12 and 6 o'clock winds don't push it sideways.</p>
+        <div class="table-wrap"><table class="data" id="traj-table"></table></div>
+      </div>
+
+      <div class="card" id="range-card" data-collapse="card">
+        <div class="chart-head">
+          <h2>Range card</h2>
+          <p class="muted">Scope clicks for each range in the trajectory table, to keep with the rifle.</p>
+        </div>
+        <div class="traj-tools">
+          <label class="mini t-field card-click-field">
+            <span>Scope clicks</span>
+            <select id="card-click"></select>
+          </label>
+          <button type="button" class="btn" id="print-card" title="Print this card at true size, then cut it out">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18v12H3z"/><path d="M3 10h18M8 6v12"/></svg>
             Print range card
           </button>
         </div>
-        <p class="hint traj-hint" id="traj-hint">MOA and mil are from the line of sight. 3 and 9 o'clock winds push the bullet the most; 12 and 6 o'clock winds don't push it sideways.</p>
-        <div class="table-wrap"><table class="data" id="traj-table"></table></div>
+        <p class="hint traj-hint" id="card-hint"></p>
+        <div class="card-preview" id="card-preview"></div>
       </div>
 
       <div class="card" id="clicks-card" data-collapse="clicks">

@@ -254,6 +254,10 @@ table.data .tag { display: inline-block; margin-left: 6px; padding: 1px 7px; bor
 .traj-tools .t-field { flex: 0 0 116px; }
 .traj-tools #print-card { margin-left: auto; }
 .traj-hint { margin: 8px 0 0; }
+.traj-tools .card-click-field { flex-basis: 170px; }
+/* Range card preview: the printed drawing, at about its real size on wide screens. */
+.card-preview { margin-top: 12px; }
+.card-preview svg { display: block; width: 100%; height: auto; border-radius: 6px; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18); }
 table.data thead tr:first-child th { border-bottom: 0; padding-bottom: 0; color: var(--faint); }
 table.data th.grp { text-align: center; }
 table.data .sep { border-left: 1px solid var(--border); }

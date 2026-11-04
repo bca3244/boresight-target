@@ -179,6 +179,26 @@ function set(d, id, value, ev = 'input') { const e = d.getElementById(id); e.val
     row('Default range card is 3 x 5 in', '5 × 3 in', texts.find(x => /Cut along/.test(x)) || 'missing', texts.some(x => /5 × 3 in/.test(x)));
   }
 
+  // Range card section on the page: the same drawing as the printout, its own click selector kept in step with the calculator.
+  await load('');
+  {
+    const d = frame.contentDocument, card = d.getElementById('range-card');
+    const texts = () => Array.from(d.querySelectorAll('#card-preview svg text')).map(x => x.textContent);
+    const at300 = () => { const t = texts(), i = t.indexOf('300'); return t.slice(i, i + 5).join(' '); };
+    row('Range card section follows the trajectory table', 'right after the table', card.previousElementSibling && card.previousElementSibling.id, card.previousElementSibling && card.previousElementSibling.id === 'traj-card');
+    row('Print range card button is in the range card section', 'in #range-card', card.contains(d.getElementById('print-card')) ? 'in #range-card' : 'elsewhere', card.contains(d.getElementById('print-card')));
+    row('Preview shows the same 300 yd row as the printout', '300 18 U 4.5 11 R 2.8', at300(), at300() === '300 18 U 4.5 11 R 2.8');
+    row('Card hint gives the printed size', '5 × 3 in', d.getElementById('card-hint').textContent, /5 × 3 in on Letter/.test(d.getElementById('card-hint').textContent));
+    set(d, 'card-click', 'mil:0.1', 'change');
+    row('Card click size changes the calculator too', 'mil:0.1 / mil:0.1', d.getElementById('card-click').value + ' / ' + d.getElementById('c-click').value, d.getElementById('c-click').value === 'mil:0.1');
+    row('Card redraws in mil clicks', 'mil header and 0.1 mil label', texts().some(x => /0\.1 mil per click/.test(x)) ? 'mil' : 'still MOA', texts().some(x => /0\.1 mil per click/.test(x)) && texts().includes('mil'));
+    set(d, 'c-click', 'moa:0.25', 'change');
+    row('Calculator click size changes the card', 'moa:0.25 and 300 yd row back', d.getElementById('card-click').value + ' · ' + at300(), d.getElementById('card-click').value === 'moa:0.25' && at300() === '300 18 U 4.5 11 R 2.8');
+    set(d, 'wind', '20');
+    row('Card follows the crosswind', '300 yd wind 22 R', at300(), / 22 R /.test(at300()));
+    set(d, 'wind', '10'); d.getElementById('wind').dispatchEvent(new Event('blur'));
+  }
+
   // Barrel length: 16 in barrel on the default 308 (test barrel 24 in, 25 fps per in) = 200 fps slower.
   // A code is 12 characters, + 6 for your own load, + 7 for the barrel, so only the length tells whether a barrel is in it.
   const hasBarrel = h => (h.length - 1 - 12) % 6 === 1;
@@ -219,7 +239,7 @@ function set(d, id, value, ev = 'input') { const e = d.getElementById(id); e.val
   {
     const d = frame.contentDocument, w = frame.contentWindow;   // the barrel checks above reloaded the page
     const cards = Array.from(d.querySelectorAll('[data-collapse]'));
-    row('Every main card is collapsible', '5 cards with a chevron', cards.filter(c => c.querySelector('.fold-btn')).length + ' cards', cards.length === 5 && cards.every(c => c.querySelector('.fold-btn')));
+    row('Every main card is collapsible', '6 cards with a chevron', cards.filter(c => c.querySelector('.fold-btn')).length + ' cards', cards.length === 6 && cards.every(c => c.querySelector('.fold-btn')));
     // Each card's body must actually disappear when folded (a card-specific style once kept the click calculator open).
     const stuck = cards.filter(c => {
       c.querySelector('.fold-btn').click();
