@@ -14,7 +14,8 @@ A web page that prints a true-scale laser boresight target for your firearm, sig
 - The trajectory table shows the bullet path and wind drift in inches (cm), MOA and mil. You choose how far it goes and the step (up to 40 ranges), the wind speed (10 mph by default) and the direction it comes from (o'clock), and the shot angle (up to 60° uphill or downhill, in 5° steps). With a shot angle, the ranges are line-of-sight distances (what a rangefinder reads) for a rifle zeroed on level ground; the table and range card follow it, while the boresight solution and point-blank range stay on level ground.
 - A range card below the trajectory table shows the scope clicks to dial for elevation and wind at each range, exactly as it prints (3 x 5 in, or 4 x 6 in for long tables). Its click size is shared with the click calculator, and its zoom button (like the chart's) fills the window with the card.
 - Works offline after the first visit, and can be installed as an app (Install app button in Chrome, Edge and Android; Share, then Add to Home Screen on iPhone and iPad).
-- Every setting is kept in a short code after the `#`, so a link opens the exact same setup. Each printed sheet carries a QR code of that link.
+- Every setting is kept in a short code after the `#`, so a link opens the exact same setup. Each printed sheet carries a QR code of that link. The plain address (no `#`) shows the defaults and stays clean until you change something.
+- The reset button (top right) puts every setting back to its default (units, paper, table, wind, shot angle, clicks, vital zone and folded cards) and opens the plain address. Saved setups and your loads are kept.
 
 Ballistics use a G1 point-mass model in standard atmosphere (59 °F, 29.53 inHg). Typical velocities and ballistic coefficients are estimates; enter your own values for best results.
 

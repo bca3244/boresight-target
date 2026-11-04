@@ -178,6 +178,7 @@ input.custom { border-color: #a07a1d; }
 .how strong { color: var(--text); }
 .how .how-note { margin: -6px 20px 18px; padding-top: 12px; border-top: 1px solid var(--border); color: var(--muted); font-size: 13.5px; }
 #install[hidden] { display: none; }
+#reset-all { width: 36px; height: 36px; }
 
 /* ---------- Collapsible cards ---------- */
 .card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }

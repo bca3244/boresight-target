@@ -647,10 +647,16 @@
     return code;
   }
 
+  // A page opened without a code (the base URL, as after Reset) keeps a clean address until something changes.
+  let plainCode = null;
   function syncUrl() {
     if (!urlReady || document.body.classList.contains('previewing')) return;
-    const hash = '#' + shareCode();
-    if (location.hash !== hash) history.replaceState(null, '', hash);
+    const code = shareCode();
+    if (plainCode !== null) {
+      if (code === plainCode && !location.hash) return;
+      plainCode = null;
+    }
+    if (location.hash !== '#' + code) history.replaceState(null, '', '#' + code);
   }
 
   function decodeName(s) {
@@ -708,7 +714,7 @@
   // Copies the current link; falls back to a hidden text field where the clipboard API isn't allowed.
   function copyLink() {
     syncUrl();
-    const url = location.href;
+    const url = location.href.split('#')[0] + '#' + shareCode();   // always the full code, even on a clean address
     const done = () => toast('Link copied');
     const fallback = () => {
       const t = document.createElement('textarea');
@@ -1636,6 +1642,17 @@
     resizeTimer = setTimeout(() => { if (state.result && !state.result.error) drawChart(); }, 80);
   });
 
+  // Reset: forget every preference (units, paper, wind, table, clicks, folded cards, …) and open the plain page.
+  // Saved setups and my loads are data, not settings, so they stay.
+  const KEEP_ON_RESET = ['bts.saved', 'bts.loads'];
+  $('reset-all').addEventListener('click', () => {
+    if (!window.confirm('Reset all settings to their defaults? Your saved setups and loads are kept.')) return;
+    try {
+      Object.keys(localStorage).filter(k => k.startsWith('bts.') && !KEEP_ON_RESET.includes(k)).forEach(k => localStorage.removeItem(k));
+    } catch (e) { /* storage unavailable: nothing was kept anyway */ }
+    location.replace(location.pathname);   // the base URL: no settings code, no query
+  });
+
   // ---------- Start ----------
   const startHash = location.hash;
   if (!applyShareCode(startHash)) {
@@ -1673,6 +1690,7 @@
   });
   showPreview(startHash);
   if (startHash === '#chart') setChartMax(true);
+  if (!startHash) plainCode = shareCode();
   urlReady = true;
   syncUrl();
 
@@ -1692,5 +1710,5 @@
   });
   window.addEventListener('appinstalled', () => { installBtn.hidden = true; });
 
-  window.BTS_APP = { state, render, print };
+  window.BTS_APP = { state, render, print, shareCode };
 })();

@@ -41,7 +41,8 @@ function set(d, id, value, ev = 'input') { const e = d.getElementById(id); e.val
   row('Chart opens on Full zero', 'full pressed', d.querySelector('[data-plot="full"]').getAttribute('aria-pressed') === 'true' ? 'full pressed' : 'near pressed',
       d.querySelector('[data-plot="full"]').getAttribute('aria-pressed') === 'true' && d.querySelector('[data-plot="near"]').getAttribute('aria-pressed') === 'false');
   const sel = id => d.getElementById(id).selectedOptions[0]?.textContent || '';
-  const defaultHash = w.location.hash;
+  const defaultHash = '#' + w.BTS_APP.shareCode();
+  row('The plain page keeps a clean address', 'no settings code', w.location.hash || 'no settings code', !w.location.hash);
   // A style that sets display on an element overrides its hidden attribute; every hidden element must really be hidden.
   const leaks = Array.from(d.querySelectorAll('[hidden]')).filter(e => getComputedStyle(e).display !== 'none').map(e => e.id || e.className || e.tagName);
   row('Everything marked hidden is off the screen', 'none showing', leaks.length ? 'showing: ' + leaks.join(', ') : 'none showing', leaks.length === 0);
@@ -168,7 +169,7 @@ function set(d, id, value, ev = 'input') { const e = d.getElementById(id); e.val
     row('20 mph doubles the drift', (drift10 * 2).toFixed(2) + ' ±0.01', drift20.toFixed(2), Math.abs(drift20 - drift10 * 2) <= 0.011);
     let saved = null; try { saved = w.localStorage.getItem('bts.wind'); } catch (e) { saved = 'n/a'; }
     row('Wind is remembered', '20', String(saved), saved === '20' || saved === 'n/a');
-    row('Wind is not in the share link', defaultHash, w.location.hash, w.location.hash === defaultHash);
+    row('Wind is not in the share link', defaultHash, '#' + w.BTS_APP.shareCode(), '#' + w.BTS_APP.shareCode() === defaultHash && !w.location.hash);
     set(d, 'wind', '');
     row('Blank wind means no drift', '0.00', cells(6)[4], cells(6)[4] === '0.00');
     set(d, 'wind', '10');
@@ -462,6 +463,44 @@ function set(d, id, value, ev = 'input') { const e = d.getElementById(id); e.val
     row('Loading the file brings the load back and opens it', 'Test 168 handload · 2700, 1 load', `${sel2(d, 'caliber')} · ${$('velocity').value}, ${/1 load/.test($('toast').textContent) ? '1 load' : $('toast').textContent}`,
         sel2(d, 'caliber') === 'Test 168 handload' && $('velocity').value === '2700' && /1 load/.test($('toast').textContent));
     w.localStorage.removeItem('bts.loads');
+  }
+
+  // Reset: change settings, keep a saved setup and a load, then reset to the plain page.
+  await load('');
+  if (storageOk) {
+    let d = frame.contentDocument, w = frame.contentWindow;
+    w.localStorage.setItem('bts.saved', JSON.stringify([{ name: 'Keep me', code: '21000b000100' }]));
+    w.localStorage.setItem('bts.loads', JSON.stringify([{ name: 'Kept load', mode: 'rifle', grains: 168, fps: 2650, bc: 0.462 }]));
+    await load('');
+    d = frame.contentDocument; w = frame.contentWindow;
+    d.querySelector('[data-units="metric"]').click();
+    set(d, 'paper', 'a4', 'change');
+    set(d, 'slope', '20', 'change');
+    set(d, 'wind', '25');
+    set(d, 'caliber-search', '350 leg');
+    d.querySelector('#traj-card .fold-btn').click();
+    row('Settings changed before the reset', 'a code in the address', w.location.hash || 'none', /^#2/.test(w.location.hash));
+    let asked = '';
+    w.confirm = q => { asked = q; return false; };
+    d.getElementById('reset-all').click();
+    row('Reset asks first, and No changes nothing', 'still metric', d.querySelector('[data-units="metric"]').getAttribute('aria-pressed') === 'true' ? 'still metric' : 'reset anyway',
+        /saved setups and loads are kept/.test(asked) && d.querySelector('[data-units="metric"]').getAttribute('aria-pressed') === 'true');
+    w.confirm = () => true;
+    await new Promise(res => { frame.onload = () => setTimeout(res, 50); d.getElementById('reset-all').click(); });
+    d = frame.contentDocument; w = frame.contentWindow;
+    const ls = w.localStorage, u = new URL(w.location.href);
+    row('Reset opens the base URL', 'no query, no code', (u.search || 'no query') + ', ' + (u.hash || 'no code'), !u.search && !u.hash);
+    row('Reset restores the defaults', 'Imperial, Letter, 308 Win, Level, 10 mph, table open',
+        [d.querySelector('[data-units="english"]').getAttribute('aria-pressed') === 'true' ? 'Imperial' : 'Metric', sel2(d, 'paper'), sel2(d, 'caliber').split(' (')[0], sel2(d, 'slope'),
+          d.getElementById('wind').value + ' mph', d.getElementById('traj-card').classList.contains('collapsed') ? 'table folded' : 'table open'].join(', '),
+        d.querySelector('[data-units="english"]').getAttribute('aria-pressed') === 'true' && sel2(d, 'paper') === 'Letter' && sel2(d, 'caliber') === '308 Win (7.62x51mm)' &&
+        sel2(d, 'slope') === 'Level' && d.getElementById('wind').value === '10' && !d.getElementById('traj-card').classList.contains('collapsed'));
+    row('Reset keeps saved setups and loads', 'Keep me, Kept load', JSON.parse(ls.getItem('bts.saved') || '[]').map(s => s.name).concat(JSON.parse(ls.getItem('bts.loads') || '[]').map(l => l.name)).join(', ') + ' · others: ' + Object.keys(ls).filter(k => k.startsWith('bts.') && !['bts.saved', 'bts.loads'].includes(k)).join(' '),
+        ls.getItem('bts.saved') && ls.getItem('bts.loads') && Object.keys(ls).filter(k => k.startsWith('bts.') && !['bts.saved', 'bts.loads'].includes(k) && !(k === 'bts.how' && ls.getItem(k) === 'open')).length === 0);
+    set(d, 'zero', '3', 'change');
+    row('Changing something after a reset writes the code again', 'a code in the address', w.location.hash || 'none', /^#2/.test(w.location.hash));
+    ls.removeItem('bts.saved'); ls.removeItem('bts.loads');
+    await load('');
   }
 
   // Sight-in sheet renders.

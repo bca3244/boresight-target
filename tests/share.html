@@ -57,8 +57,8 @@ const CASES = [
 
 (async () => {
   await load('');
-  const defaultHash = frame.contentWindow.location.hash;
-  row('Default page writes a settings code', 'code like #2 + 11 characters', defaultHash, /^#2[0-9a-z]{11}$/.test(defaultHash));
+  const defaultHash = '#' + frame.contentWindow.BTS_APP.shareCode();
+  row('Default page keeps a clean address, with a settings code ready', 'no # in the address; code like #2 + 11 characters', (frame.contentWindow.location.hash || 'no #') + '; ' + defaultHash, !frame.contentWindow.location.hash && /^#2[0-9a-z]{11}$/.test(defaultHash));
 
   for (const c of CASES) {
     await load('');
