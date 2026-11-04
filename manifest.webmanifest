@@ -1,7 +1,7 @@
 {
   "name": "Boresight Target Generator",
   "short_name": "Boresight",
-  "description": "Print a true-scale laser boresight target for your firearm, sight height, load and zero range.",
+  "description": "Boresight, sight in and dial: true-scale laser boresight and sight-in targets, scope clicks and a trajectory table for your firearm, sight height, load and zero range.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

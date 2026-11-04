@@ -1,6 +1,6 @@
 # Boresight Target Generator
 
-A web page that prints a true-scale laser boresight target for your firearm, sight height, load and zero range.
+A web page to boresight, sight in and dial: it prints true-scale laser boresight and sight-in targets, and works out the scope clicks and a trajectory table for your firearm, sight height, load and zero range.
 
 - Pick a rifle, pistol or shotgun, the caliber, sight height, bullet weight and shape, and the zero range.
 - The page works out where the laser (which follows the bore) crosses the line of sight, and how far below the aim point the laser spot sits at a closer target range.
