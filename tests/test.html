@@ -168,6 +168,21 @@ row('Sight cutoff: 1.5 in starts at 8', 8, BTS.targetRanges(1.5, 44.9)[0], BTS.t
   row('A tall sight starts the zone a little out from the muzzle', '> 0 yd', sightHigh.startYd.toFixed(1) + ' yd', sightHigh.startYd > 0 && sightHigh.startYd < sightHigh.nearZeroYd);
 }
 
+// Shot angle: 308 Win 150 gr zeroed at 100 yd on level ground, shot 30° up or down at line-of-sight ranges.
+{
+  const a = BTS.solve(2790, 0.370, 1.5, 100).angle, R = [100, 300, 500];
+  const flat = BTS.trajectoryTable(2790, 0.370, 1.5, a, R), level = BTS.trajectoryTable(2790, 0.370, 1.5, a, R, 0);
+  row('Shot angle 0 is the level table', 'same path', (level[2].y - flat[2].y).toExponential(1) + ' in apart', R.every((r, i) => level[i].y === flat[i].y));
+  const up = BTS.trajectoryTable(2790, 0.370, 1.5, a, R, 30), down = BTS.trajectoryTable(2790, 0.370, 1.5, a, R, -30);
+  row('Uphill and downhill shots hit high', 'both above level at 300 and 500 yd', `level ${flat[2].y.toFixed(1)}, up ${up[2].y.toFixed(1)}, down ${down[2].y.toFixed(1)} in at 500 yd`,
+      [1, 2].every(i => up[i].y > flat[i].y + 1 && down[i].y > flat[i].y + 1));
+  // Rifleman's rule: only g x cos(angle) bends the path away from the line of sight.
+  const bore = r => 12 * r * 3 * Math.tan(a) - 1.5, rule = i => bore(R[i]) - Math.cos(Math.PI / 6) * (bore(R[i]) - flat[i].y);
+  row("30° up at 500 yd is close to the rifleman's rule", `${rule(2).toFixed(1)} in, within 1 in`, up[2].y.toFixed(1) + ' in', Math.abs(up[2].y - rule(2)) < 1);
+  row('Uphill drops a little more than downhill (gravity slows the bullet)', 'up below down at 500 yd', `up ${up[2].y.toFixed(2)}, down ${down[2].y.toFixed(2)} in`, up[2].y < down[2].y && down[2].y - up[2].y < 1);
+  row('Uphill bullets arrive slower', 'lower velocity', `up ${up[2].v.toFixed(0)}, down ${down[2].v.toFixed(0)} fps`, up[2].v < flat[2].v && down[2].v > flat[2].v);
+}
+
 document.getElementById('summary').textContent = `${pass} passed, ${fail} failed`;
 document.title = `TESTS ${pass} passed ${fail} failed`;
 </script>

@@ -114,6 +114,38 @@
         </span>
         <select id="caliber"></select>
         <span class="hint" id="caliber-count"></span>
+        <div class="load-tools">
+          <button type="button" class="link" id="load-add">Add your own load</button>
+          <button type="button" class="link" id="load-keep" hidden>Save to my loads</button>
+          <button type="button" class="link" id="load-edit" hidden>Edit this load</button>
+          <button type="button" class="link" id="load-delete" hidden>Delete this load</button>
+        </div>
+        <div class="load-form" id="load-form" hidden>
+          <h3 id="lf-title">Your own load</h3>
+          <label class="mini">
+            <span>Name</span>
+            <input id="lf-name" type="text" maxlength="40" autocomplete="off" spellcheck="false">
+          </label>
+          <div class="load-form-row">
+            <label class="mini">
+              <span>Bullet weight</span>
+              <span class="input-unit"><input id="lf-weight" type="number" inputmode="decimal" min="0" step="any"><span id="lf-weight-unit">gr</span></span>
+            </label>
+            <label class="mini">
+              <span>Muzzle velocity</span>
+              <span class="input-unit"><input id="lf-velocity" type="number" inputmode="decimal" min="0" step="any"><span id="lf-velocity-unit">fps</span></span>
+            </label>
+            <label class="mini">
+              <span>G1 B.C.</span>
+              <input id="lf-bc" type="number" inputmode="decimal" min="0.01" max="2" step="0.001">
+            </label>
+          </div>
+          <p class="hint" id="lf-note"></p>
+          <div class="load-form-actions">
+            <button type="button" class="btn small primary" id="lf-save">Save load</button>
+            <button type="button" class="btn small" id="lf-cancel">Cancel</button>
+          </div>
+        </div>
       </div>
 
       <label class="field">
@@ -281,6 +313,10 @@
           <label class="mini t-field">
             <span>From</span>
             <select id="wind-clock"></select>
+          </label>
+          <label class="mini t-field">
+            <span>Shot angle</span>
+            <select id="slope" title="Uphill or downhill angle to the target"></select>
           </label>
         </div>
         <p class="hint traj-hint" id="traj-hint">MOA and mil are from the line of sight. 3 and 9 o'clock winds push the bullet the most; 12 and 6 o'clock winds don't push it sideways.</p>

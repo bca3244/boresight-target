@@ -32,7 +32,7 @@ function set(d, id, value, ev = 'input') { const e = d.getElementById(id); e.val
 
 (async () => {
   await load('');
-  try { ['bts.saved', 'bts.plot', 'bts.windclock', 'bts.table.rifle', 'bts.table.pistol', 'bts.table.shotgun'].forEach(k => frame.contentWindow.localStorage.removeItem(k)); } catch (e) { /* storage blocked */ }
+  try { ['bts.saved', 'bts.loads', 'bts.slope', 'bts.plot', 'bts.windclock', 'bts.table.rifle', 'bts.table.pistol', 'bts.table.shotgun'].forEach(k => frame.contentWindow.localStorage.removeItem(k)); } catch (e) { /* storage blocked */ }
   await load('');   // again, so the chart starts from its default view
   const w = frame.contentWindow, d = frame.contentDocument;
   row('Install button stays hidden until the browser offers installing', 'hidden', d.getElementById('install').hidden ? 'hidden' : 'shown', d.getElementById('install').hidden);
@@ -364,6 +364,99 @@ function set(d, id, value, ev = 'input') { const e = d.getElementById(id); e.val
     row('Near/Full buttons still work inside the chart header', 'near pressed, chart open', (d.querySelector('[data-plot="near"]').click(), d.querySelector('[data-plot="near"]').getAttribute('aria-pressed')) + (chart.classList.contains('collapsed') ? ', collapsed' : ', chart open'),
         d.querySelector('[data-plot="near"]').getAttribute('aria-pressed') === 'true' && !chart.classList.contains('collapsed'));
     d.querySelector('[data-plot="full"]').click();   // back to the default, which the QR checks below expect
+  }
+
+  // Shot angle: the table and range card change, the boresight solution doesn't.
+  await load('');
+  {
+    const d = frame.contentDocument, w = frame.contentWindow, $ = id => d.getElementById(id);
+    const opts = Array.from($('slope').options).map(o => o.textContent);
+    row('Shot angle offers 60° down to 60° up', '25 choices, Level selected', opts.length + ' choices, ' + sel2(d, 'slope') + ' selected', opts.length === 25 && opts[0] === '60° down' && opts[24] === '60° up' && sel2(d, 'slope') === 'Level');
+    const at300 = () => { const r = Array.from(d.querySelectorAll('#traj-table tbody tr')).find(tr => tr.cells[0].textContent === '300'); return r ? parseFloat(r.cells[1].textContent.replace('−', '-')) : NaN; };
+    const level = at300(), meet = $('meet').textContent;
+    set(d, 'slope', '30', 'change');
+    const up = at300();
+    row('A 30° uphill shot hits higher at 300 yd', `above ${level}`, String(up), up > level + 0.5);
+    row('Shot angle is named under the table and on the range card', '30° uphill', /30° uphill/.test($('traj-hint').textContent) && /30° uphill/.test($('card-preview').textContent) ? '30° uphill in both' : 'missing',
+        /30° uphill: ranges are line-of-sight/.test($('traj-hint').textContent) && /30° uphill/.test($('card-preview').textContent));
+    row('Shot angle leaves the meet distance alone', meet, $('meet').textContent, $('meet').textContent === meet);
+    let kept = null; try { kept = w.localStorage.getItem('bts.slope'); } catch (e) { kept = 'n/a'; }
+    row('Shot angle is remembered', '30', String(kept), kept === '30' || kept === 'n/a');
+    set(d, 'slope', '-30', 'change');
+    row('A 30° downhill shot also hits higher', `above ${level}`, String(at300()), at300() > level + 0.5 && /30° downhill/.test($('traj-hint').textContent));
+    set(d, 'slope', '0', 'change');
+    row('Level again', String(level), String(at300()), at300() === level && !/uphill|downhill/.test($('traj-hint').textContent));
+  }
+
+  // My loads: add, use, share by link, save from a link, edit, metric, setups file, delete.
+  await load('');
+  if (storageOk) {
+    let d = frame.contentDocument, w = frame.contentWindow, $ = id => d.getElementById(id);
+    w.localStorage.removeItem('bts.loads');
+    await load('');
+    d = frame.contentDocument; w = frame.contentWindow;
+    row('Add-load form starts hidden, with the current load', 'hidden; 150 / 2790 / 0.370 after opening',
+        ($('load-form').hidden ? 'hidden; ' : 'shown; ') + ($('load-add').click(), `${$('lf-weight').value} / ${$('lf-velocity').value} / ${$('lf-bc').value}`),
+        $('lf-weight').value === '150' && $('lf-bc').value === $('bc').value && $('lf-velocity').value === $('velocity').value && !$('load-form').hidden);
+    set(d, 'lf-name', 'Test 168 handload'); set(d, 'lf-weight', '168'); set(d, 'lf-velocity', '2650'); set(d, 'lf-bc', '0.462');
+    $('lf-save').click();
+    row('Saving a load selects it', 'Test 168 handload · 168 gr · 2650 fps · 0.462', `${sel2(d, 'caliber')} · ${sel2(d, 'weight')} · ${$('velocity').value} fps · ${$('bc').value}`,
+        sel2(d, 'caliber') === 'Test 168 handload' && sel2(d, 'weight') === '168 gr' && $('velocity').value === '2650' && $('bc').value === '0.462' && $('load-form').hidden);
+    row('Its weight and shape are fixed', 'both disabled', $('weight').disabled && $('shape').disabled ? 'both disabled' : 'editable', $('weight').disabled && $('shape').disabled);
+    const groups = Array.from(d.querySelectorAll('#caliber optgroup')).map(g => g.label + ' ' + g.children.length);
+    row('My loads come first in the caliber list', 'My loads 1, Calibers 189', groups.join(', '), groups.join(', ') === 'My loads 1, Calibers 189');
+    const stored = JSON.parse(w.localStorage.getItem('bts.loads') || '[]');
+    row('The load is kept in this browser', '1 rifle load', stored.length + ' ' + (stored[0] && stored[0].mode) + ' load', stored.length === 1 && stored[0].fps === 2650 && stored[0].grains === 168);
+    row('Edit and Delete show for a saved load', 'shown', !$('load-edit').hidden && !$('load-delete').hidden && $('load-keep').hidden ? 'shown' : 'hidden', !$('load-edit').hidden && !$('load-delete').hidden && $('load-keep').hidden);
+    const loadHash = w.location.hash;
+    row('The link carries the load', '…c…~Test%20168%20handload', loadHash, /c[0-9a-z]{9}~Test%20168%20handload$/.test(loadHash));
+    set(d, 'caliber-search', 'handload');
+    row('Search finds my load', 'Test 168 handload', sel2(d, 'caliber'), sel2(d, 'caliber') === 'Test 168 handload' && $('caliber').options.length === 1);
+    set(d, 'caliber-search', '');
+    // Open the link where the load isn't saved.
+    w.localStorage.removeItem('bts.loads');
+    await load(loadHash);
+    d = frame.contentDocument; w = frame.contentWindow;
+    row('A link opens a load that isn’t saved here', 'Test 168 handload (from link) · 2650', sel2(d, 'caliber') + ' · ' + $('velocity').value, sel2(d, 'caliber') === 'Test 168 handload (from link)' && $('velocity').value === '2650');
+    row('The link keeps the same code', loadHash, w.location.hash, w.location.hash === loadHash);
+    row('Save to my loads shows for a load from a link', 'shown, no Edit', !$('load-keep').hidden && $('load-edit').hidden ? 'shown, no Edit' : 'wrong buttons', !$('load-keep').hidden && $('load-edit').hidden);
+    $('load-keep').click();
+    row('Saving it from the link', 'Test 168 handload, 1 stored', sel2(d, 'caliber') + ', ' + JSON.parse(w.localStorage.getItem('bts.loads') || '[]').length + ' stored',
+        sel2(d, 'caliber') === 'Test 168 handload' && JSON.parse(w.localStorage.getItem('bts.loads') || '[]').length === 1 && $('load-keep').hidden);
+    $('load-edit').click();
+    row('Edit fills the form with the load', '168 / 2650 / 0.462', `${$('lf-weight').value} / ${$('lf-velocity').value} / ${$('lf-bc').value}`, $('lf-weight').value === '168' && $('lf-velocity').value === '2650' && $('lf-name').value === 'Test 168 handload');
+    set(d, 'lf-velocity', '2700');
+    $('lf-save').click();
+    row('Editing replaces the load', '2700 fps, still 1 load', $('velocity').value + ' fps, ' + JSON.parse(w.localStorage.getItem('bts.loads')).length + ' load', $('velocity').value === '2700' && JSON.parse(w.localStorage.getItem('bts.loads')).length === 1);
+    $('load-add').click(); set(d, 'lf-name', 'Bad'); set(d, 'lf-velocity', '50'); $('lf-save').click();
+    row('A bad velocity is refused', 'Enter a muzzle velocity…', $('lf-note').textContent, /muzzle velocity/.test($('lf-note').textContent) && !$('load-form').hidden);
+    $('lf-cancel').click();
+    d.querySelector('[data-units="metric"]').click();
+    row('In metric the load shows in grams and m/s', '10.89 g · 823 m/s', sel2(d, 'weight') + ' · ' + $('velocity').value + ' m/s', sel2(d, 'weight') === '10.89 g' && $('velocity').value === '823' && sel2(d, 'caliber') === 'Test 168 handload');
+    d.querySelector('[data-units="english"]').click();
+    row('The range card names the load', 'Test 168 handload', /Test 168 handload/.test($('card-preview').textContent) ? 'on the range card' : 'missing', /Test 168 handload/.test($('card-preview').textContent));
+    // Setups file round trip.
+    let blob = null;
+    w.URL.createObjectURL = b => { blob = b; return 'blob:test'; };
+    const realClick = w.HTMLAnchorElement.prototype.click;
+    w.HTMLAnchorElement.prototype.click = function () {};
+    $('saved-export').click();
+    w.HTMLAnchorElement.prototype.click = realClick;
+    const json = blob ? JSON.parse(await blob.text()) : {};
+    row('Setups file holds my loads', 'Test 168 handload 2700', (json.loads || []).map(l => l.name + ' ' + l.fps).join(', '), json.loads && json.loads.length === 1 && json.loads[0].fps === 2700);
+    w.confirm = () => true;
+    $('load-delete').click();
+    row('Deleting a load goes back to the default caliber', '308 Win (7.62x51mm), none stored', sel2(d, 'caliber') + ', ' + JSON.parse(w.localStorage.getItem('bts.loads')).length + ' stored',
+        sel2(d, 'caliber') === '308 Win (7.62x51mm)' && JSON.parse(w.localStorage.getItem('bts.loads')).length === 0 && !d.querySelector('#caliber optgroup'));
+    const dt = new w.DataTransfer();
+    dt.items.add(new w.File([JSON.stringify(json)], 'setups.json', { type: 'application/json' }));
+    $('saved-file').files = dt.files;
+    $('toast').textContent = '';
+    $('saved-file').dispatchEvent(new Event('change'));
+    for (let i = 0; i < 60 && !$('toast').textContent; i++) await wait(50);
+    row('Loading the file brings the load back and opens it', 'Test 168 handload · 2700, 1 load', `${sel2(d, 'caliber')} · ${$('velocity').value}, ${/1 load/.test($('toast').textContent) ? '1 load' : $('toast').textContent}`,
+        sel2(d, 'caliber') === 'Test 168 handload' && $('velocity').value === '2700' && /1 load/.test($('toast').textContent));
+    w.localStorage.removeItem('bts.loads');
   }
 
   // Sight-in sheet renders.

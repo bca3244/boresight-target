@@ -42,8 +42,11 @@
 
   // Point-mass flight along the bore at `angle` (radians). Calls sample(xFt, yFt, vyFtPerS) at each step
   // and stops once x passes maxFt (or when sample returns true). y is measured from the bore's starting point.
-  function fly(v0, bc, angle, maxFt, sample) {
-    const k = RHO * Math.PI / (8 * bc * 144);
+  // x runs along the line of sight; slopeDeg tilts that line up (+) or down (-), so gravity has a part along it
+  // (slowing an uphill bullet) and only g x cos(slope) across it. Air density is the same at every angle.
+  function fly(v0, bc, angle, maxFt, sample, slopeDeg) {
+    const k = RHO * Math.PI / (8 * bc * 144), s = (slopeDeg || 0) * Math.PI / 180;
+    const gAlong = GRAVITY * Math.sin(s), gAcross = GRAVITY * Math.cos(s);
     let x = 0, y = 0, t = 0, vx = v0 * Math.cos(angle), vy = v0 * Math.sin(angle);
     sample(0, 0, vy, vx, 0);
     while (x < maxFt && vx > 1) {
@@ -52,8 +55,8 @@
       x += vx * DT;
       y += vy * DT;
       t += DT;
-      vx -= a * vx * DT;
-      vy -= (a * vy + GRAVITY) * DT;
+      vx -= (a * vx + gAlong) * DT;
+      vy -= (a * vy + gAcross) * DT;
       if (sample(x, y, vy, vx, t) === true) return;
     }
   }
@@ -105,7 +108,9 @@
   }
 
   // Height (in, relative to the sight line), speed (fps) and time of flight (s) at each range in rangesYd.
-  function trajectoryTable(v0, bc, sightIn, angle, rangesYd) {
+  // With slopeDeg the ranges are line-of-sight distances (what a rangefinder reads) up or down that angle,
+  // for a rifle zeroed on level ground at `angle`.
+  function trajectoryTable(v0, bc, sightIn, angle, rangesYd, slopeDeg) {
     const want = rangesYd.slice().sort((a, b) => a - b), out = [];
     let i = 0, p = null;
     fly(v0, bc, angle, want[want.length - 1] * 3 + 1, (x, y, vy, vx, t) => {
@@ -117,7 +122,7 @@
         i++;
       }
       p = cur;
-    });
+    }, slopeDeg);
     return out;
   }
 

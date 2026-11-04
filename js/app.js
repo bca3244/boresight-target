@@ -16,7 +16,7 @@
     savedName: $('saved-name'), savedSave: $('saved-save'), savedNote: $('saved-note'), savedCount: $('saved-count'),
     savedExport: $('saved-export'), savedImport: $('saved-import'), savedFile: $('saved-file'),
     trajTable: $('traj-table'), trajNote: $('traj-note'), wind: $('wind'), windUnit: $('wind-unit'),
-    windClock: $('wind-clock'), tMax: $('t-max'), tStep: $('t-step'), trajHint: $('traj-hint'), printCard: $('print-card'),
+    windClock: $('wind-clock'), slope: $('slope'), tMax: $('t-max'), tStep: $('t-step'), trajHint: $('traj-hint'), printCard: $('print-card'),
     cardClick: $('card-click'), cardHint: $('card-hint'), cardPreview: $('card-preview'),
     pbrZone: $('pbr-zone'), pbrUnit: $('pbr-unit'), pbrUse: $('pbr-use'), pbrHint: $('pbr-hint'),
     cRange: $('c-range'), cClick: $('c-click'), cVert: $('c-vert'), cVdir: $('c-vdir'), cHoriz: $('c-horiz'), cHdir: $('c-hdir'),
@@ -40,6 +40,10 @@
   const WIND_DEFAULT_MPH = 10, KMH_PER_MPH = 1.609344;
   function windPref() { const v = parseFloat(loadPref('wind', '')); return v >= 0 && v < 100 ? v : WIND_DEFAULT_MPH; }
   function clockPref() { const v = parseInt(loadPref('windclock', '3'), 10); return v >= 1 && v <= 12 ? v : 3; }
+  // Shot angle for the trajectory table and range card: whole degrees, + uphill, - downhill (the zero is on level ground).
+  const SLOPE_MAX = 60;
+  function slopePref() { const v = parseInt(loadPref('slope', '0'), 10); return Math.abs(v) <= SLOPE_MAX && v % 5 === 0 ? v : 0; }
+  function slopeText(deg) { return deg ? Math.abs(deg) + '° ' + (deg > 0 ? 'uphill' : 'downhill') : 'level'; }
   // Vital zone for the point-blank range, kept in inches (6 in, about 15 cm, is a common deer-size zone).
   const VITAL_DEFAULT_IN = 6, VITAL_MIN_IN = 1, VITAL_MAX_IN = 48;
   function vitalPref() { const v = parseFloat(loadPref('vital', '')); return v >= VITAL_MIN_IN && v <= VITAL_MAX_IN ? v : VITAL_DEFAULT_IN; }
@@ -69,7 +73,10 @@
     windMph: windPref(), // crosswind for the drift columns, kept in mph whatever the units
     vitalIn: vitalPref(), // vital zone for the point-blank range, in inches
     windClock: clockPref(), // where the wind comes from, 1-12 o'clock (3 = from the right)
+    slopeDeg: slopePref(),  // shot angle in degrees, + uphill
     table: tablePrefs(),    // trajectory table extent per firearm: { max, step } in the displayed distance unit
+    loads: readLoads() || [], // my loads (every firearm type), see normLoad()
+    linkLoad: null,      // a load opened from a link that isn't in my loads
     result: null
   };
   const metric = () => state.units === 'metric';
@@ -94,11 +101,53 @@
     return best;
   }
 
+  // ---------- My loads: your own bullet weight, velocity and B.C. under a name, kept in this browser ----------
+  // They head the caliber list for their firearm type. A link carries the load itself, so it opens anywhere;
+  // a load from a link that isn't saved here shows as "(from link)" until it's saved.
+  const LOAD_BASE = 10000;   // caliber option values at or above this are loads (LOAD_BASE + position in modeLoads())
+  const LOAD_NAME_MAX = 40;
+  const LOAD_SHAPE = '(your load)';   // the shape list's only entry for a load: its B.C. is already known
+  const LOAD_LIMITS = { grains: [1, 4000], fps: [100, 6000], bc: [0.01, 2] };
+  // A cleaned copy of a load (rounded the way links store it), or null if it isn't a valid load.
+  function normLoad(l) {
+    if (!l || typeof l.name !== 'string' || !BTS.MODES.includes(l.mode)) return null;
+    const out = { name: l.name.trim().slice(0, LOAD_NAME_MAX), mode: l.mode, grains: Math.round(l.grains * 10) / 10, fps: Math.round(l.fps), bc: Math.round(l.bc * 1000) / 1000 };
+    const within = k => out[k] >= LOAD_LIMITS[k][0] && out[k] <= LOAD_LIMITS[k][1];
+    return out.name && within('grains') && within('fps') && within('bc') ? out : null;
+  }
+  function readLoads() {
+    try { const v = JSON.parse(localStorage.getItem('bts.loads') || '[]'); return Array.isArray(v) ? v.map(normLoad).filter(Boolean) : []; }
+    catch (e) { return null; }   // null = storage unavailable
+  }
+  function writeLoads() {
+    try { localStorage.setItem('bts.loads', JSON.stringify(state.loads)); return true; } catch (e) { return false; }
+  }
+  const sameLoad = (a, b) => a.mode === b.mode && a.name === b.name && a.grains === b.grains && a.fps === b.fps && a.bc === b.bc;
+  function modeLoads() {
+    const list = state.loads.filter(l => l.mode === state.mode);
+    if (state.linkLoad && state.linkLoad.mode === state.mode) list.push(state.linkLoad);
+    return list;
+  }
+  function currentLoad() {
+    const v = idx(el.caliber);
+    return v >= LOAD_BASE ? modeLoads()[v - LOAD_BASE] || null : null;
+  }
+  function caliberName() {
+    const load = currentLoad();
+    return load ? load.name : BTS.calibers(state.mode)[idx(el.caliber)];
+  }
+  // Weight label in the units the weight list uses: grains (or grams), ounces for shotgun slugs.
+  function loadWeightLabel(grains) {
+    if (state.mode === 'shotgun') return metric() ? (grains / 437.5 * 28.349518).toFixed(1) + ' g' : (grains / 437.5).toFixed(3) + ' oz';
+    return metric() ? (grains * 0.06479891).toFixed(2) + ' g' : +grains.toFixed(1) + ' gr';
+  }
+
   // ---------- Building the lists (each keeps the previous choice when it still makes sense) ----------
 
   function buildCalibers(keepName) {
     const names = BTS.calibers(state.mode);
     let pick = names.indexOf(keepName);
+    if (pick < 0) { const k = modeLoads().findIndex(l => l.name === keepName); if (k >= 0) pick = LOAD_BASE + k; }
     if (pick < 0) pick = names.indexOf(DEFAULTS[state.mode].caliber);
     el.caliberLabel.textContent = state.mode === 'shotgun' ? 'Gauge' : 'Caliber';
     el.caliberSearch.value = '';
@@ -108,21 +157,33 @@
 
   // Caliber options keep their position in the full list as their value, so filtering never changes what idx() means.
   // Every word typed must appear in the name: "6.5 creed" finds "6.5mm Creedmoor".
+  // Your loads come first, in their own group.
   function fillCalibers(keepIndex, term) {
-    const names = BTS.calibers(state.mode);
+    const names = BTS.calibers(state.mode), loads = modeLoads();
+    const all = loads.map((l, k) => ({ value: LOAD_BASE + k, name: l.name + (l === state.linkLoad ? ' (from link)' : ''), mine: true }))
+      .concat(names.map((name, i) => ({ value: i, name })));
     const words = term.toLowerCase().split(/\s+/).filter(Boolean);
-    const matches = names.map((n, i) => i).filter(i => words.every(w => names[i].toLowerCase().includes(w)));
-    const shown = matches.length ? matches : [keepIndex];
+    const matches = all.filter(o => words.every(w => o.name.toLowerCase().includes(w)));
+    let shown = matches.length ? matches : all.filter(o => o.value === keepIndex);
+    if (!shown.length) shown = [all.find(o => !o.mine)];
     el.caliber.innerHTML = '';
-    shown.forEach(i => {
+    const group = label => { const g = document.createElement('optgroup'); g.label = label; return g; };
+    const groups = loads.length ? { mine: group('My loads'), list: group(state.mode === 'shotgun' ? 'Gauges' : 'Calibers') } : null;
+    shown.forEach(it => {
       const o = document.createElement('option');
-      o.value = String(i);
-      o.textContent = names[i];
-      el.caliber.appendChild(o);
+      o.value = String(it.value);
+      o.textContent = it.name;
+      (groups ? (it.mine ? groups.mine : groups.list) : el.caliber).appendChild(o);
     });
-    el.caliber.value = String(shown.includes(keepIndex) ? keepIndex : shown[0]);
+    if (groups) [groups.mine, groups.list].forEach(g => { if (g.children.length) el.caliber.appendChild(g); });
+    el.caliber.value = String(shown.some(o => o.value === keepIndex) ? keepIndex : shown[0].value);
     el.caliberCount.textContent = !words.length ? '' : matches.length
-      ? `${matches.length} of ${names.length} match “${term.trim()}”` : `No calibers match “${term.trim()}”`;
+      ? `${matches.length} of ${all.length} match “${term.trim()}”` : `No calibers match “${term.trim()}”`;
+  }
+  // Selects one of modeLoads() (clearing any search).
+  function selectLoad(load) {
+    el.caliberSearch.value = '';
+    fillCalibers(LOAD_BASE + modeLoads().indexOf(load), '');
   }
 
   function buildSights(keepInches) {
@@ -133,6 +194,13 @@
   }
 
   function buildWeights(keepGrains) {
+    const load = currentLoad();
+    if (load) {
+      state.lists.weights = [{ label: loadWeightLabel(load.grains), grains: load.grains }];
+      fill(el.weight, state.lists.weights, w => w.label, 0);
+      el.weight.disabled = true;
+      return;
+    }
     const ci = idx(el.caliber);
     const weights = BTS.weights(state.mode, ci, metric());
     state.lists.weights = weights;
@@ -145,6 +213,12 @@
   }
 
   function buildShapes(keepLabel) {
+    if (currentLoad()) {
+      state.lists.shapes = [{ label: LOAD_SHAPE, index: -1 }];
+      fill(el.shape, state.lists.shapes, s => s.label, 0);
+      el.shape.disabled = true;
+      return;
+    }
     const shapes = BTS.shapes(state.mode, idx(el.caliber));
     state.lists.shapes = shapes;
     let pick = shapes.findIndex(s => s.label === keepLabel);
@@ -163,12 +237,13 @@
   }
 
   // Typical velocity (adjusted for barrel length) and B.C. for the selected caliber, weight and shape.
+  // A load of your own supplies its own velocity and B.C.
   function setTypicalLoad() {
-    const ci = idx(el.caliber), w = state.lists.weights[idx(el.weight)], s = state.lists.shapes[idx(el.shape)];
+    const ci = idx(el.caliber), w = state.lists.weights[idx(el.weight)], s = state.lists.shapes[idx(el.shape)], load = currentLoad();
     if (!w || !s) return;
-    state.typicalFps = BTS.typicalVelocityFps(state.mode, ci, w);
+    state.typicalFps = load ? load.fps : BTS.typicalVelocityFps(state.mode, ci, w);
     state.vFps = Math.max(100, state.typicalFps + barrelAdjustFps());
-    state.bc = BTS.typicalBc(state.mode, ci, w, s.index);
+    state.bc = load ? load.bc : BTS.typicalBc(state.mode, ci, w, s.index);
     state.custom = false;
     showLoad();
   }
@@ -237,7 +312,10 @@
     el.velocity.classList.toggle('custom', state.custom);
     el.bc.classList.toggle('custom', state.custom);
     el.resetLoad.hidden = !state.custom;
+    const load = currentLoad();
+    el.resetLoad.textContent = load ? 'Use this load’s values' : 'Use typical values';
     el.loadNote.textContent = state.custom ? 'Using your values.'
+      : load ? `Values from your load “${load.name}”${barrelAdjustFps() ? ', adjusted for your barrel' : ''}.`
       : barrelAdjustFps() ? 'Typical values for this load, adjusted for your barrel; enter your own if you know them.'
       : 'Typical values for this load; enter your own if you know them.';
     if (state.barrel) showBarrelNote();
@@ -318,7 +396,7 @@
     const toYd = d => (metric() ? d / BTS.METERS_PER_YARD : d);
     const grains = state.lists.weights[idx(el.weight)].grains;
     const windMph = state.windMph * windFactor();
-    return BTS.trajectoryTable(state.vFps, state.bc, sightIn, angle, disp.map(toYd)).map((p, i) => {
+    return BTS.trajectoryTable(state.vFps, state.bc, sightIn, angle, disp.map(toYd), state.slopeDeg).map((p, i) => {
       const rangeYd = toYd(disp[i]), driftIn = BTS.windDriftIn(windMph, rangeYd, p.t, state.vFps);
       return {
         range: disp[i],
@@ -372,8 +450,9 @@
       h += `<tr${row.zero ? ' class="zero-row"' : ''}><td>${row.range}${row.zero ? ' <span class="tag">zero</span>' : ''}</td>${trajectoryCells(row, cls)}</tr>`;
     });
     el.trajTable.innerHTML = h + '</tbody>';
-    el.trajNote.textContent = (r.nearZero != null ? `Near zero ${r.nearZero.toFixed(1)} ${u.d} · ` : '') + `Max rise ${riseText(r.rise)}`;
+    el.trajNote.textContent = (r.nearZero != null ? `Near zero ${r.nearZero.toFixed(1)} ${u.d} · ` : '') + `Max rise ${riseText(r.rise)}` + (state.slopeDeg ? ' (level ground)' : '');
     el.trajHint.textContent = (state.tableCut ? `Showing the first ${TABLE_ROWS} ranges; choose a longer step to see farther. ` : '') +
+      (state.slopeDeg ? `Shooting ${slopeText(state.slopeDeg)}: ranges are line-of-sight distances (what a rangefinder reads), for a zero made on level ground. ` : '') +
       'MOA and mil are from the line of sight. 3 and 9 o\'clock winds push the bullet the most; 12 and 6 o\'clock winds don\'t push it sideways.';
     renderCard();
   }
@@ -439,6 +518,7 @@
     el.windUnit.textContent = u.w;
     if (document.activeElement !== el.wind) el.wind.value = String(windDisplay());
     el.windClock.value = String(state.windClock);
+    el.slope.value = String(state.slopeDeg);
     document.querySelectorAll('.t-dist').forEach(s => { s.textContent = u.d; });
     if (document.activeElement !== el.tMax) el.tMax.value = String(t.max);
     el.tStep.value = String(t.step);
@@ -506,6 +586,7 @@
 
   function render(keepTarget) {
     const r = compute();
+    showLoadTools();
     const ok = !r.error;
     el.error.hidden = ok;
     el.error.innerHTML = r.error || '';
@@ -545,20 +626,24 @@
   //   2 chars     target range (0 = meet distance)
   //   3 + 3       optional: your own velocity (in the displayed unit) and B.C. x 1000
   //   b + 2+2+2   optional: barrel length and test barrel length (tenths of an inch), change per inch (fps)
-  const SHARE_RE = /^#([12])([0-9a-n])([0-9a-z]{2})([0-9a-z]{2})([0-9a-z]{2})([0-9a-z])([0-9a-z])([0-9a-z]{2})(?:([0-9a-z]{3})([0-9a-z]{3}))?(?:b([0-9a-z]{2})([0-9a-z]{2})([0-9a-z]{2}))?$/;
+  //   c + 3+3+3   optional: one of my loads (the caliber, weight and shape positions are then 0): weight in tenths
+  //               of a grain, velocity (fps) and B.C. x 1000, then ~ and the load's name (URL-encoded)
+  const SHARE_RE = /^#([12])([0-9a-n])([0-9a-z]{2})([0-9a-z]{2})([0-9a-z]{2})([0-9a-z])([0-9a-z])([0-9a-z]{2})(?:([0-9a-z]{3})([0-9a-z]{3}))?(?:b([0-9a-z]{2})([0-9a-z]{2})([0-9a-z]{2}))?(?:c([0-9a-z]{3})([0-9a-z]{3})([0-9a-z]{3})(?:~([^#]{1,240}))?)?$/;
   let urlReady = false;   // no URL writes while the page is still starting up
   const b36 = (n, len) => Math.max(0, Math.round(n)).toString(36).padStart(len, '0').slice(-len);
 
   function shareCode() {
     const flags = BTS.MODES.indexOf(state.mode) * 8 + (metric() ? 4 : 0) + (state.paper === 'a4' ? 2 : 0) + (state.plot === 'full' ? 1 : 0);
     const target = state.result && !state.result.error ? idx(el.target) : 0;
-    let code = '2' + flags.toString(36) + b36(idx(el.caliber), 2) + b36(idx(el.sight), 2) + b36(idx(el.weight), 2) +
+    const load = currentLoad();
+    let code = '2' + flags.toString(36) + b36(load ? 0 : idx(el.caliber), 2) + b36(idx(el.sight), 2) + b36(idx(el.weight), 2) +
       b36(idx(el.shape), 1) + b36(idx(el.zero), 1) + b36(target, 2);
     if (state.custom && state.vFps > 0 && state.bc > 0) {
       code += b36(metric() ? state.vFps / FPS_PER_MPS : state.vFps, 3) + b36(state.bc * 1000, 3);
     }
     const b = state.barrel;
     if (b && b.on && b.len != null && state.mode !== 'shotgun') code += 'b' + b36(b.len * 10, 2) + b36(b.ref * 10, 2) + b36(b.rate, 2);
+    if (load) code += 'c' + b36(load.grains * 10, 3) + b36(load.fps, 3) + b36(load.bc * 1000, 3) + '~' + encodeURIComponent(load.name);
     return code;
   }
 
@@ -566,6 +651,11 @@
     if (!urlReady || document.body.classList.contains('previewing')) return;
     const hash = '#' + shareCode();
     if (location.hash !== hash) history.replaceState(null, '', hash);
+  }
+
+  function decodeName(s) {
+    if (!s) return '';
+    try { return decodeURIComponent(s); } catch (e) { return s; }
   }
 
   // Restores settings from a link. Returns false (and changes nothing) if the hash isn't a settings code.
@@ -585,7 +675,12 @@
     setPressed('[data-mode]', 'data-mode', state.mode);
     setPressed('[data-units]', 'data-units', state.units);
     setPressed('[data-plot]', 'data-plot', state.plot);
-    buildCalibers(null); pick(el.caliber, n(m[2]));
+    // A load in the link: use the saved one that matches it, or list it as "(from link)".
+    const linked = m[13] ? normLoad({ name: decodeName(m[16]) || 'Load from link', mode, grains: n(m[13]) / 10, fps: n(m[14]), bc: n(m[15]) / 1000 }) : null;
+    const saved = linked && state.loads.find(l => sameLoad(l, linked));
+    state.linkLoad = linked && !saved ? linked : null;
+    buildCalibers(null);
+    if (linked) selectLoad(saved || state.linkLoad); else pick(el.caliber, n(m[2]));
     buildSights(null); pick(el.sight, n(m[3]));
     buildWeights(null);
     if (version === '1') {
@@ -756,14 +851,15 @@
     const v = metric() ? BTS.roundHalfEven(r.vFps / FPS_PER_MPS) + ' m/s' : BTS.roundHalfEven(r.vFps) + ' fps';
     return [
       ['Firearm', MODE_NAMES[state.mode]],
-      [state.mode === 'shotgun' ? 'Gauge' : 'Caliber', BTS.calibers(state.mode)[idx(el.caliber)]],
+      [state.mode === 'shotgun' ? 'Gauge' : 'Caliber', caliberName()],
       ['Sight height', r.sight.value.toFixed(1) + (metric() ? ' cm' : ' in')],
       ['Bullet weight', w.label],
       ['Bullet shape', s.label],
-      ['Muzzle velocity', v + (state.custom ? '' : barrelAdjustFps() ? ' (typical, adjusted for barrel)' : ' (typical)')],
+      ['Muzzle velocity', v + (state.custom ? '' : currentLoad() ? (barrelAdjustFps() ? ' (adjusted for barrel)' : '') : barrelAdjustFps() ? ' (typical, adjusted for barrel)' : ' (typical)')],
       ...(barrelAdjustFps() || (state.barrel && state.barrel.on && state.barrel.len != null && state.mode !== 'shotgun') ? [['Barrel length', barrelText()]] : []),
-      ['G1 B.C.', r.bc.toFixed(3) + (state.custom ? '' : ' (typical)')],
+      ['G1 B.C.', r.bc.toFixed(3) + (state.custom || currentLoad() ? '' : ' (typical)')],
       ['Zero range', r.zero + ' ' + unitD],
+      ...(state.slopeDeg ? [['Shot angle', slopeText(state.slopeDeg) + ' (table only)']] : []),
       ['Meet distance', r.meet.toFixed(1) + ' ' + unitD],
       ['Maximum rise', riseText(r.rise)],
       ['Target range', (t.meet ? r.meet.toFixed(1) : t.range) + ' ' + unitD],
@@ -782,7 +878,7 @@
     const dash = 'stroke="#000" stroke-width="0.1" stroke-linecap="round" stroke-dasharray="0.32 0.16"';
     let s = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}in" height="${H}in" viewBox="0 0 ${W} ${H}" font-family="Arial, Helvetica, sans-serif">`;
     s += `<rect width="${W}" height="${H}" fill="#fff"/>`;
-    s += `<text x="${W / 2}" y="0.55" text-anchor="middle" font-size="0.12" fill="#555">Boresight target · ${esc(BTS.calibers(state.mode)[idx(el.caliber)])}</text>`;
+    s += `<text x="${W / 2}" y="0.55" text-anchor="middle" font-size="0.12" fill="#555">Boresight target · ${esc(caliberName())}</text>`;
     s += `<text x="0.95" y="1.05" text-anchor="middle" font-size="0.34" font-weight="700">TOP</text><text x="${W - 0.95}" y="1.05" text-anchor="middle" font-size="0.34" font-weight="700">TOP</text>`;
     // Light grid through the aim point: 1 in squares (1 cm in metric) for reading offsets.
     s += gridLines(cx, aimY, metric() ? 1 / 2.54 : 1, 0.45, 1.25, W - 0.45, fy - 0.45, '#d3d8de', 0.008);
@@ -872,7 +968,7 @@
     let s = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}in" height="${H}in" viewBox="0 0 ${W} ${H}" font-family="Arial, Helvetica, sans-serif">`;
     s += `<rect width="${W}" height="${H}" fill="#fff"/>`;
     s += `<text x="${W / 2}" y="0.62" text-anchor="middle" font-size="0.22" font-weight="700">Sight-in target · shoot from ${r.zero} ${unitD}</text>`;
-    s += `<text x="${W / 2}" y="0.9" text-anchor="middle" font-size="0.12" fill="#555">${esc(BTS.calibers(state.mode)[idx(el.caliber)])} · squares are 1 ${unitL}</text>`;
+    s += `<text x="${W / 2}" y="0.9" text-anchor="middle" font-size="0.12" fill="#555">${esc(caliberName())} · squares are 1 ${unitL}</text>`;
     s += qrCode(x1 - 0.82, 0.22, 0.82);   // top-right corner, clear of the title and the square counts
     s += gridLines(cx, cy, step, x0, y0, x1, y1, '#b9c1cb', 0.012);
     // Every 5th line and the center lines darker, so squares are easy to count.
@@ -917,10 +1013,10 @@
     const side = driftSide(), dialWind = side === 'left' ? 'R' : 'L';
     let g = `<rect x="${x0}" y="${y0}" width="${CW}" height="${CH}" fill="#fff" stroke="#888" stroke-width="0.01" stroke-dasharray="0.08 0.05"/>`;
     const tx = x0 + pad, tw = CW - 2 * pad;
-    g += `<text x="${tx}" y="${y0 + pad + 0.11}" font-size="0.13" font-weight="700">${esc(BTS.calibers(state.mode)[idx(el.caliber)])}</text>`;
+    g += `<text x="${tx}" y="${y0 + pad + 0.11}" font-size="0.13" font-weight="700">${esc(caliberName())}</text>`;
     g += `<text x="${tx + tw}" y="${y0 + pad + 0.11}" text-anchor="end" font-size="0.085" fill="#444">Zero ${r.zero} ${u.d} · sight ${r.sight.value.toFixed(1)} ${metric() ? 'cm' : 'in'}</text>`;
     g += `<text x="${tx}" y="${y0 + pad + 0.26}" font-size="0.085" fill="#333">${esc(w.label + ' ' + s.label)} · ${v} · G1 B.C. ${r.bc.toFixed(3)}</text>`;
-    g += `<text x="${tx}" y="${y0 + pad + 0.39}" font-size="0.085" fill="#333">Clicks to dial at ${esc(clickLabel)} · wind ${esc(windText(u))}</text>`;
+    g += `<text x="${tx}" y="${y0 + pad + 0.39}" font-size="0.085" fill="#333">Clicks to dial at ${esc(clickLabel)} · wind ${esc(windText(u))}${state.slopeDeg ? " · " + slopeText(state.slopeDeg) : ""}</text>`;
     // Table: range, elevation (clicks and angle), windage (clicks and angle), one or two column groups.
     const top = y0 + pad + 0.58, bottom = y0 + CH - pad - 0.08, perCol = Math.ceil(rows.length / cols);
     const rowH = Math.min(0.2, (bottom - top - 0.2) / perCol), fs = Math.min(0.105, rowH * 0.62);
@@ -976,14 +1072,14 @@
     const unitD = u.d;
     const footer = `<footer>G1 point-mass model, standard atmosphere (59 °F, 29.53 inHg). Printed ${esc(new Date().toLocaleString())}. Confirm your zero with live fire.</footer>`;
     const page2 = !second ? '' : `<div class="sheet report" style="width:${paper.w}in;height:${paper.h}in">
-      <header><div><h1>Boresight Report · trajectory</h1><p>${esc(BTS.calibers(state.mode)[idx(el.caliber)])} · zeroed at ${r.zero} ${unitD} · ${esc(state.lists.weights[idx(el.weight)].label)} ${esc(state.lists.shapes[idx(el.shape)].label)}</p></div></header>
+      <header><div><h1>Boresight Report · trajectory</h1><p>${esc(caliberName())} · zeroed at ${r.zero} ${unitD} · ${esc(state.lists.weights[idx(el.weight)].label)} ${esc(state.lists.shapes[idx(el.shape)].label)}</p></div></header>
       ${traj}
-      <p class="report-note">MOA and mil are from the line of sight. Drift is for ${esc(windText(u))}.</p>
+      <p class="report-note">MOA and mil are from the line of sight. Drift is for ${esc(windText(u))}.${state.slopeDeg ? " Shot angle " + slopeText(state.slopeDeg) + "; ranges are line-of-sight distances." : ""}</p>
       ${footer}
     </div>`;
     return `<div class="sheet report" style="width:${paper.w}in;height:${paper.h}in">
       <header><svg viewBox="0 0 32 32" width="34" height="34"><circle cx="16" cy="16" r="11" fill="none" stroke="#0f9d8a" stroke-width="2.5"/><path d="M16 1v8M16 23v8M1 16h8M23 16h8" stroke="#0f9d8a" stroke-width="2.5"/><circle cx="16" cy="16" r="3" fill="#e0283d"/></svg>
-      <div><h1>Boresight Report</h1><p>${esc(BTS.calibers(state.mode)[idx(el.caliber)])} · zeroed at ${r.zero} ${unitD}</p></div>
+      <div><h1>Boresight Report</h1><p>${esc(caliberName())} · zeroed at ${r.zero} ${unitD}</p></div>
       <div class="report-qr"><span>Scan to open<br>this setup</span><svg viewBox="0 0 1 1" width="0.8in" height="0.8in">${qrCode(0, 0, 1)}</svg></div></header>
       <p class="report-meet">Line of sight and laser beam meet at <strong>${r.meet.toFixed(1)} ${unitD}</strong></p>
       <div class="report-chart">${chart}</div>
@@ -1021,9 +1117,10 @@
 
   function changeMode(mode) {
     if (mode === state.mode) return;
-    const prevName = BTS.calibers(state.mode)[idx(el.caliber)];
+    const prevName = caliberName();
     const prevZero = state.lists.zeros[idx(el.zero)];
     state.mode = mode;
+    closeLoadForm();
     setPressed('[data-mode]', 'data-mode', mode);
     buildCalibers(prevName);
     buildSights(null);
@@ -1045,6 +1142,7 @@
     const keepLoad = state.custom ? { v: state.vFps, bc: state.bc } : null;
     state.units = units;
     savePref('units', units);
+    closeLoadForm();
     setPressed('[data-units]', 'data-units', units);
     // Click calculator: convert the measured offsets, and let the shot distance follow the zero again.
     const f = units === 'metric' ? BTS.CM_PER_INCH : 1 / BTS.CM_PER_INCH;
@@ -1076,6 +1174,17 @@
   el.windClock.addEventListener('change', () => {
     state.windClock = Number(el.windClock.value);
     savePref('windclock', String(state.windClock));
+    refreshTable();
+  });
+  // Shot angle: 60° down to 60° up in 5° steps.
+  for (let a = -SLOPE_MAX; a <= SLOPE_MAX; a += 5) {
+    const o = document.createElement('option');
+    o.value = String(a); o.textContent = a ? Math.abs(a) + '° ' + (a > 0 ? 'up' : 'down') : 'Level';
+    el.slope.appendChild(o);
+  }
+  el.slope.addEventListener('change', () => {
+    state.slopeDeg = Number(el.slope.value);
+    savePref('slope', String(state.slopeDeg));
     refreshTable();
   });
   // Table extent, remembered per firearm type.
@@ -1160,6 +1269,101 @@
     if (e.key === 'Escape' && el.caliberSearch.value) { el.caliberSearch.value = ''; fillCalibers(idx(el.caliber), ''); e.stopPropagation(); }
     if (e.key === 'Enter') { e.preventDefault(); el.caliber.focus(); }
   });
+
+  // ---------- My loads: the form and its buttons ----------
+  const lf = {
+    form: $('load-form'), title: $('lf-title'), name: $('lf-name'), weight: $('lf-weight'), weightUnit: $('lf-weight-unit'),
+    velocity: $('lf-velocity'), velocityUnit: $('lf-velocity-unit'), bc: $('lf-bc'), note: $('lf-note'),
+    add: $('load-add'), keep: $('load-keep'), edit: $('load-edit'), del: $('load-delete')
+  };
+  let editing = null;   // the saved load the form is changing, or null for a new one
+  const LF_NOTE = 'Your loads are listed first under Caliber and kept in this browser; links and setup files carry them too.';
+  // Weight in the form: grains (grams in metric), or ounces for shotgun slugs.
+  const weightUnit = () => state.mode === 'shotgun' ? (metric() ? 'g' : 'oz') : (metric() ? 'g' : 'gr');
+  const toFormWeight = gr => state.mode === 'shotgun' ? (metric() ? gr / 437.5 * 28.349518 : gr / 437.5) : (metric() ? gr * 0.06479891 : gr);
+  const fromFormWeight = v => state.mode === 'shotgun' ? (metric() ? v / 28.349518 * 437.5 : v * 437.5) : (metric() ? v / 0.06479891 : v);
+
+  function showLoadTools() {
+    const load = currentLoad();
+    lf.keep.hidden = !load || load !== state.linkLoad;
+    lf.edit.hidden = lf.del.hidden = !load || load === state.linkLoad;
+  }
+  function closeLoadForm() { lf.form.hidden = true; editing = null; }
+  // Opens the form for a new load (starting from what's selected now) or for changing a saved one.
+  function openLoadForm(load) {
+    editing = load;
+    const w = state.lists.weights[idx(el.weight)];
+    const grains = load ? load.grains : w.grains, fps = load ? load.fps : state.vFps, bc = load ? load.bc : state.bc;
+    lf.title.textContent = load ? `Edit “${load.name}”` : 'Your own load';
+    lf.name.value = load ? load.name : '';
+    lf.name.placeholder = `e.g. ${currentLoad() ? 'My' : caliberName().split(' (')[0]} ${w.label} handload`;
+    lf.weightUnit.textContent = weightUnit();
+    lf.velocityUnit.textContent = metric() ? 'm/s' : 'fps';
+    lf.weight.value = String(+toFormWeight(grains).toFixed(state.mode === 'shotgun' || metric() ? 2 : 1));
+    lf.velocity.value = String(metric() ? Math.round(fps * 0.3048) : Math.round(fps));
+    lf.bc.value = bc.toFixed(3);
+    lf.note.textContent = LF_NOTE;
+    lf.note.classList.remove('bad');
+    lf.form.hidden = false;
+    lf.name.focus();
+  }
+  // Puts a load in my loads (replacing the one being edited, or one with the same name) and selects it.
+  function storeLoad(load, replace) {
+    const at = state.loads.indexOf(replace), same = state.loads.findIndex(l => l !== replace && l.mode === load.mode && l.name === load.name);
+    if (same >= 0) state.loads.splice(same, 1);
+    if (replace && state.loads.indexOf(replace) >= 0) state.loads[state.loads.indexOf(replace)] = load; else state.loads.push(load);
+    if (state.linkLoad && (state.linkLoad === replace || sameLoad(state.linkLoad, load))) state.linkLoad = null;
+    const ok = writeLoads();
+    if (!ok) {
+      // Storage is blocked: keep it for this visit only.
+      state.loads = state.loads.filter(l => l !== load);
+      state.linkLoad = load;
+    }
+    buildCalibers(null);
+    selectLoad(load);
+    onCaliberChange();
+    return { ok, updated: at >= 0 || same >= 0 };
+  }
+  lf.add.addEventListener('click', () => openLoadForm(null));
+  lf.edit.addEventListener('click', () => openLoadForm(currentLoad()));
+  lf.form.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && e.target.tagName === 'INPUT') { e.preventDefault(); $('lf-save').click(); }
+    if (e.key === 'Escape') { e.stopPropagation(); closeLoadForm(); }
+  });
+  $('lf-cancel').addEventListener('click', closeLoadForm);
+  $('lf-save').addEventListener('click', () => {
+    const v = parseFloat(lf.velocity.value);
+    const raw = { name: lf.name.value.trim() || lf.name.placeholder.replace(/^e\.g\. /, ''), mode: state.mode,
+      grains: fromFormWeight(parseFloat(lf.weight.value)), fps: metric() ? v / 0.3048 : v, bc: parseFloat(lf.bc.value) };
+    const load = normLoad(raw);
+    if (!load) {
+      const L = LOAD_LIMITS, fpsText = metric() ? '30–1830 m/s' : '100–6000 fps';
+      lf.note.textContent = !(raw.fps >= L.fps[0] && raw.fps <= L.fps[1]) ? `Enter a muzzle velocity of ${fpsText}.`
+        : !(raw.bc >= L.bc[0] && raw.bc <= L.bc[1]) ? 'Enter a G1 B.C. from 0.010 to 2.000.' : 'Enter the bullet weight.';
+      lf.note.classList.add('bad');
+      return;
+    }
+    const r = storeLoad(load, editing);
+    closeLoadForm();
+    toast(!r.ok ? 'Couldn’t save in this browser; using it for this visit' : r.updated ? `Updated “${load.name}”` : `Saved “${load.name}”`);
+  });
+  lf.keep.addEventListener('click', () => {
+    const load = state.linkLoad;
+    if (!load) return;
+    const r = storeLoad(Object.assign({}, load), null);
+    toast(!r.ok ? 'Couldn’t save in this browser' : r.updated ? `Updated “${load.name}”` : `Saved “${load.name}”`);
+  });
+  lf.del.addEventListener('click', () => {
+    const load = currentLoad();
+    if (!load || load === state.linkLoad || !window.confirm(`Delete your load “${load.name}”?`)) return;
+    state.loads = state.loads.filter(l => l !== load);
+    writeLoads();
+    closeLoadForm();
+    buildCalibers(null);
+    onCaliberChange();
+    toast(`Deleted “${load.name}”`);
+  });
+
   el.sight.addEventListener('change', () => render(keepTargetValue()));
   el.weight.addEventListener('change', () => { setTypicalLoad(); render(keepTargetValue()); });
   el.shape.addEventListener('change', () => { setTypicalLoad(); render(keepTargetValue()); });
@@ -1214,7 +1418,7 @@
     if (!available) el.savedNote.textContent = 'This browser is blocking site storage, so setups can’t be saved here. Copy link still works.';
   }
   function suggestedName() {
-    return BTS.calibers(state.mode)[idx(el.caliber)] + ' · ' + state.lists.weights[idx(el.weight)].label + ' · ' +
+    return caliberName() + ' · ' + state.lists.weights[idx(el.weight)].label + ' · ' +
       state.lists.zeros[idx(el.zero)] + (metric() ? ' m' : ' yd') + ' zero';
   }
   el.savedSave.addEventListener('click', () => {
@@ -1253,7 +1457,8 @@
       saved: new Date().toISOString(),
       current: { name: suggestedName(), code: current, link: setupUrl(current) },
       setups: (readSaved() || []).map(s => ({ name: s.name, code: s.code, link: setupUrl(s.code) })),
-      settings: { windMph: state.windMph, windClock: state.windClock, click: el.cClick.value, vitalIn: state.vitalIn, table: JSON.parse(JSON.stringify(state.table)) }
+      loads: state.loads.map(l => Object.assign({}, l)),
+      settings: { windMph: state.windMph, windClock: state.windClock, slopeDeg: state.slopeDeg, click: el.cClick.value, vitalIn: state.vitalIn, table: JSON.parse(JSON.stringify(state.table)) }
     };
   }
   function exportSetups() {
@@ -1280,6 +1485,7 @@
     const s = data.settings || {}, settings = {};
     if (typeof s.windMph === 'number' && s.windMph >= 0 && s.windMph < 100) settings.windMph = s.windMph;
     if (Number.isInteger(s.windClock) && s.windClock >= 1 && s.windClock <= 12) settings.windClock = s.windClock;
+    if (Number.isInteger(s.slopeDeg) && Math.abs(s.slopeDeg) <= SLOPE_MAX && s.slopeDeg % 5 === 0) settings.slopeDeg = s.slopeDeg;
     if (CLICK_VALUES.includes(s.click)) settings.click = s.click;
     if (typeof s.vitalIn === 'number' && s.vitalIn >= VITAL_MIN_IN && s.vitalIn <= VITAL_MAX_IN) settings.vitalIn = s.vitalIn;
     if (s.table && typeof s.table === 'object') {
@@ -1289,8 +1495,9 @@
         if (t && t.max >= 10 && t.max <= TABLE_MAX && TABLE_STEPS.includes(t.step)) settings.table[mode] = { max: t.max, step: t.step };
       });
     }
+    const loads = (Array.isArray(data.loads) ? data.loads : []).map(normLoad).filter(Boolean);
     if (!setups.length && !current) return { error: 'This file has no setups in it.' };
-    return { setups, current, settings };
+    return { setups, current, settings, loads };
   }
   // Adds the file's setups to My setups (a setup with the same name is replaced), applies its settings and opens its current setup.
   function importSetups(data) {
@@ -1299,6 +1506,7 @@
     const st = f.settings;
     if (st.windMph != null) { state.windMph = st.windMph; savePref('wind', String(st.windMph)); }
     if (st.windClock != null) { state.windClock = st.windClock; savePref('windclock', String(st.windClock)); }
+    if (st.slopeDeg != null) { state.slopeDeg = st.slopeDeg; savePref('slope', String(st.slopeDeg)); }
     if (st.table) Object.keys(st.table).forEach(mode => { state.table[mode] = st.table[mode]; savePref('table.' + mode, st.table[mode].max + ':' + st.table[mode].step); });
     if (st.click) { el.cClick.value = el.cardClick.value = st.click; savePref('click', st.click); }
     if (st.vitalIn != null) { state.vitalIn = st.vitalIn; savePref('vital', String(st.vitalIn)); }
@@ -1312,11 +1520,19 @@
       if (!writeSaved(list)) added = replaced = 0;
     }
     renderSaved(f.setups[0] && f.setups[0].name);
+    // My loads: a load with the same name and firearm type is replaced. Done before opening the setup so it can find its load.
+    let loadsIn = 0;
+    f.loads.forEach(l => {
+      const i = state.loads.findIndex(x => x.mode === l.mode && x.name === l.name);
+      if (i >= 0) { if (!sameLoad(state.loads[i], l)) loadsIn++; state.loads[i] = l; } else { state.loads.push(l); loadsIn++; }
+    });
+    if (loadsIn && !writeLoads()) loadsIn = 0;
     if (!applyShareCode('#' + (f.current || f.setups[0].code))) render(keepTargetValue());
     const parts = [];
     if (added) parts.push(`${added} new`);
     if (replaced) parts.push(`${replaced} updated`);
     toast('Loaded the file' + (parts.length ? ` (${parts.join(', ')} saved setup${added + replaced === 1 ? '' : 's'})` : '') +
+      (loadsIn ? `, ${loadsIn} load${loadsIn === 1 ? '' : 's'}` : '') +
       (list === null && f.setups.length ? '; this browser can’t keep saved setups, so only the current one is open' : ''));
     return true;
   }
