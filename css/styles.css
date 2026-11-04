@@ -232,6 +232,8 @@ h2.card-head { flex-wrap: nowrap; }
 .saved-row input::placeholder { color: var(--faint); }
 .btn.small { height: 40px; padding: 0 14px; }
 .saved-row .icon-btn { width: 40px; height: 40px; }
+.saved-files .btn { flex: 1; justify-content: center; padding: 0 8px; gap: 6px; white-space: nowrap; min-width: 0; }
+.saved-files .btn svg { flex-shrink: 0; }
 .icon-btn.danger:hover { color: #ff8a96; border-color: var(--danger-border); }
 .icon-btn:disabled, .btn:disabled { opacity: 0.45; cursor: default; }
 

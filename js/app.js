@@ -14,6 +14,7 @@
     caliberSearch: $('caliber-search'), caliberCount: $('caliber-count'),
     savedCard: $('saved-card'), savedList: $('saved-list'), savedLoad: $('saved-load'), savedDelete: $('saved-delete'),
     savedName: $('saved-name'), savedSave: $('saved-save'), savedNote: $('saved-note'), savedCount: $('saved-count'),
+    savedExport: $('saved-export'), savedImport: $('saved-import'), savedFile: $('saved-file'),
     trajTable: $('traj-table'), trajNote: $('traj-note'), wind: $('wind'), windUnit: $('wind-unit'),
     windClock: $('wind-clock'), tMax: $('t-max'), tStep: $('t-step'), trajHint: $('traj-hint'), printCard: $('print-card'),
     cardClick: $('card-click'), cardHint: $('card-hint'), cardPreview: $('card-preview'),
@@ -762,9 +763,9 @@
 
   // Link to this exact setup for the QR codes. Opened from disk, the code points at the published site instead.
   const PUBLIC_URL = 'https://bca3244.github.io/boresight-target/';
-  function setupUrl() {
+  function setupUrl(code) {
     const base = /^https?:$/.test(location.protocol) ? location.origin + location.pathname.replace(/index\.html$/, '') : PUBLIC_URL;
-    return base + '#' + shareCode();
+    return base + '#' + (code || shareCode());
   }
 
   // QR code of setupUrl() as SVG elements: a white square of side `size` at (x, y), quiet zone included.
@@ -1170,6 +1171,95 @@
     renderSaved();
     toast(`Deleted “${name}”`);
   });
+
+  // ---------- Setups file: saved setups, the current setup and the table/wind/click settings as JSON ----------
+  const FILE_FORMAT = 'boresight-setups', FILE_VERSION = 1;
+  const CLICK_VALUES = Array.from(el.cClick.options).map(o => o.value);
+  function setupsFile() {
+    const current = shareCode();
+    return {
+      format: FILE_FORMAT, version: FILE_VERSION, app: 'Boresight Target Generator', site: PUBLIC_URL,
+      saved: new Date().toISOString(),
+      current: { name: suggestedName(), code: current, link: setupUrl(current) },
+      setups: (readSaved() || []).map(s => ({ name: s.name, code: s.code, link: setupUrl(s.code) })),
+      settings: { windMph: state.windMph, windClock: state.windClock, click: el.cClick.value, table: JSON.parse(JSON.stringify(state.table)) }
+    };
+  }
+  function exportSetups() {
+    const data = setupsFile(), d = new Date();
+    const stamp = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    const blob = new Blob([JSON.stringify(data, null, 2) + '\n'], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `boresight-setups-${stamp}.json`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    const n = data.setups.length;
+    toast(n ? `Saved ${n} setup${n === 1 ? '' : 's'} and the current one to a file` : 'Saved the current setup to a file');
+  }
+  // Checks a parsed file; returns { setups, current, settings } with only valid entries, or an error message.
+  function readSetupsFile(data) {
+    if (!data || typeof data !== 'object' || data.format !== FILE_FORMAT) return { error: 'This isn’t a setups file saved from this page.' };
+    if (!(data.version <= FILE_VERSION)) return { error: 'This file was saved by a newer version of the page. Reload the page and try again.' };
+    const okCode = c => typeof c === 'string' && SHARE_RE.test('#' + c);
+    const setups = (Array.isArray(data.setups) ? data.setups : [])
+      .filter(s => s && typeof s.name === 'string' && s.name.trim() && okCode(s.code))
+      .map(s => ({ name: s.name.trim().slice(0, 60), code: s.code }));
+    const current = data.current && okCode(data.current.code) ? data.current.code : null;
+    const s = data.settings || {}, settings = {};
+    if (typeof s.windMph === 'number' && s.windMph >= 0 && s.windMph < 100) settings.windMph = s.windMph;
+    if (Number.isInteger(s.windClock) && s.windClock >= 1 && s.windClock <= 12) settings.windClock = s.windClock;
+    if (CLICK_VALUES.includes(s.click)) settings.click = s.click;
+    if (s.table && typeof s.table === 'object') {
+      settings.table = {};
+      Object.keys(TABLE_DEFAULTS).forEach(mode => {
+        const t = s.table[mode];
+        if (t && t.max >= 10 && t.max <= TABLE_MAX && TABLE_STEPS.includes(t.step)) settings.table[mode] = { max: t.max, step: t.step };
+      });
+    }
+    if (!setups.length && !current) return { error: 'This file has no setups in it.' };
+    return { setups, current, settings };
+  }
+  // Adds the file's setups to My setups (a setup with the same name is replaced), applies its settings and opens its current setup.
+  function importSetups(data) {
+    const f = readSetupsFile(data);
+    if (f.error) { toast(f.error); return false; }
+    const st = f.settings;
+    if (st.windMph != null) { state.windMph = st.windMph; savePref('wind', String(st.windMph)); }
+    if (st.windClock != null) { state.windClock = st.windClock; savePref('windclock', String(st.windClock)); }
+    if (st.table) Object.keys(st.table).forEach(mode => { state.table[mode] = st.table[mode]; savePref('table.' + mode, st.table[mode].max + ':' + st.table[mode].step); });
+    if (st.click) { el.cClick.value = el.cardClick.value = st.click; savePref('click', st.click); }
+    const list = readSaved();
+    let added = 0, replaced = 0;
+    if (list && f.setups.length) {
+      f.setups.forEach(s => {
+        const existing = list.find(x => x.name === s.name);
+        if (existing) { if (existing.code !== s.code) replaced++; existing.code = s.code; } else { list.push(s); added++; }
+      });
+      if (!writeSaved(list)) added = replaced = 0;
+    }
+    renderSaved(f.setups[0] && f.setups[0].name);
+    if (!applyShareCode('#' + (f.current || f.setups[0].code))) render(keepTargetValue());
+    const parts = [];
+    if (added) parts.push(`${added} new`);
+    if (replaced) parts.push(`${replaced} updated`);
+    toast('Loaded the file' + (parts.length ? ` (${parts.join(', ')} saved setup${added + replaced === 1 ? '' : 's'})` : '') +
+      (list === null && f.setups.length ? '; this browser can’t keep saved setups, so only the current one is open' : ''));
+    return true;
+  }
+  el.savedExport.addEventListener('click', exportSetups);
+  el.savedImport.addEventListener('click', () => { el.savedFile.value = ''; el.savedFile.click(); });
+  el.savedFile.addEventListener('change', () => {
+    const file = el.savedFile.files && el.savedFile.files[0];
+    if (!file) return;
+    if (file.size > 1e6) { toast('That file is too large to be a setups file.'); return; }
+    file.text().then(text => {
+      let data;
+      try { data = JSON.parse(text); } catch (e) { toast('That file isn’t valid JSON.'); return; }
+      importSetups(data);
+    }, () => toast('Couldn’t read that file.'));
+  });
+
   el.savedCard.open = loadPref('savedOpen', 'closed') === 'open';
   el.savedCard.addEventListener('toggle', () => savePref('savedOpen', el.savedCard.open ? 'open' : 'closed'));
   renderSaved();

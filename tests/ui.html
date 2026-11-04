@@ -93,6 +93,56 @@ function set(d, id, value, ev = 'input') { const e = d.getElementById(id); e.val
     w.confirm = () => true;
     d.getElementById('saved-delete').click();
     row('Delete removes it', 'No saved setups yet', sel('saved-list'), sel('saved-list') === 'No saved setups yet');
+
+    // Setups file: save to a JSON file, change everything, load the file back.
+    set(d, 'saved-name', 'File rifle');
+    d.getElementById('saved-save').click();
+    set(d, 'wind', '15');
+    set(d, 'wind-clock', '9', 'change');
+    const fileCode = w.location.hash.slice(1);
+    let blob = null, fileName = '';
+    w.URL.createObjectURL = b => { blob = b; return 'blob:test'; };
+    const realClick = w.HTMLAnchorElement.prototype.click;
+    w.HTMLAnchorElement.prototype.click = function () { fileName = this.download; };
+    d.getElementById('saved-export').click();
+    w.HTMLAnchorElement.prototype.click = realClick;
+    const json = blob ? JSON.parse(await blob.text()) : {};
+    row('Save to file names the file by date', 'boresight-setups-YYYY-MM-DD.json', fileName, /^boresight-setups-\d{4}-\d\d-\d\d\.json$/.test(fileName));
+    row('File holds the saved setup with a link', 'File rifle · ' + fileCode, (json.setups || []).map(s => s.name + ' · ' + s.code).join(', '),
+        json.format === 'boresight-setups' && json.setups && json.setups.length === 1 && json.setups[0].name === 'File rifle' && json.setups[0].code === fileCode && json.setups[0].link.endsWith('#' + fileCode));
+    row('File holds the current setup and settings', fileCode + ', 15 mph from 9', (json.current && json.current.code) + ', ' + (json.settings && json.settings.windMph) + ' mph from ' + (json.settings && json.settings.windClock),
+        json.current && json.current.code === fileCode && json.settings.windMph === 15 && json.settings.windClock === 9 && json.settings.click === d.getElementById('c-click').value && json.settings.table.rifle.max === 300);
+    // Change the setup and settings, delete the saved one, then load the file back through the file picker.
+    d.getElementById('saved-delete').click();
+    d.querySelector('[data-mode="pistol"]').click();
+    set(d, 'wind', '5');
+    set(d, 'wind-clock', '3', 'change');
+    json.setups.push({ name: 'Bad entry', code: 'not-a-code' });
+    json.settings.click = 'mil:0.1';
+    json.settings.table.rifle = { max: 500, step: 100 };
+    const pick = async (text, name = 'setups.json') => {
+      const dt = new w.DataTransfer();
+      dt.items.add(new w.File([text], name, { type: 'application/json' }));
+      const input = d.getElementById('saved-file');
+      input.files = dt.files;
+      d.getElementById('toast').textContent = '';
+      input.dispatchEvent(new Event('change'));
+      for (let i = 0; i < 60 && !d.getElementById('toast').textContent; i++) await wait(50);   // reading the file is asynchronous
+    };
+    await pick(JSON.stringify(json));
+    const names = Array.from(d.getElementById('saved-list').options).map(o => o.textContent);
+    row('Loading the file restores the saved setup (and skips a bad entry)', 'File rifle', names.join(', '), names.length === 1 && names[0] === 'File rifle');
+    row('Loading the file opens its current setup', fileCode + ' · ' + calBefore, w.location.hash.slice(1) + ' · ' + sel('caliber'), w.location.hash.slice(1) === fileCode && sel('caliber') === calBefore);
+    row('Loading the file restores wind, table and click settings', '15 mph, 9 o\'clock, 500/100, mil:0.1',
+        `${d.getElementById('wind').value} mph, ${d.getElementById('wind-clock').value} o'clock, ${d.getElementById('t-max').value}/${d.getElementById('t-step').value}, ${d.getElementById('c-click').value}`,
+        d.getElementById('wind').value === '15' && d.getElementById('wind-clock').value === '9' && d.getElementById('t-max').value === '500' && d.getElementById('t-step').value === '100' &&
+        d.getElementById('c-click').value === 'mil:0.1' && d.getElementById('card-click').value === 'mil:0.1');
+    await pick('{"hello": 1}');
+    row('A JSON file from elsewhere is refused', 'isn’t a setups file', d.getElementById('toast').textContent, /isn’t a setups file/.test(d.getElementById('toast').textContent));
+    await pick('not json at all');
+    row('A broken file is refused', 'isn’t valid JSON', d.getElementById('toast').textContent, /isn’t valid JSON/.test(d.getElementById('toast').textContent));
+    d.getElementById('saved-delete').click();
+    ['bts.wind', 'bts.windclock', 'bts.click', 'bts.table.rifle', 'bts.table.pistol', 'bts.table.shotgun'].forEach(k => w.localStorage.removeItem(k));
   }
 
   // Wind drift and MOA / mil columns. Columns: range, path in/MOA/mil, drift in/MOA/mil, velocity, energy, time.

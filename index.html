@@ -79,7 +79,18 @@
           <input id="saved-name" type="text" maxlength="60" placeholder="Name this setup, e.g. Ruger American 350 Legend" aria-label="Name for this setup">
           <button type="button" class="btn small primary" id="saved-save">Save</button>
         </div>
-        <p class="hint" id="saved-note">Saved in this browser only. Use Copy link to move a setup to another device.</p>
+        <div class="saved-row saved-files">
+          <button type="button" class="btn small" id="saved-export" title="Download your saved setups, the current setup and table, wind and click settings as a JSON file">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>
+            Save to file
+          </button>
+          <button type="button" class="btn small" id="saved-import" title="Open a setups file saved from this page">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4M7 9l5-5 5 5M5 20h14"/></svg>
+            Load from file
+          </button>
+          <input type="file" id="saved-file" accept=".json,application/json" hidden>
+        </div>
+        <p class="hint" id="saved-note">Saved in this browser only. Save to file keeps a copy you can back up or open on another device; Copy link shares a single setup.</p>
       </div>
     </details>
 
