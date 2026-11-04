@@ -148,6 +148,26 @@ row('Sight cutoff: 1.5 in starts at 8', 8, BTS.targetRanges(1.5, 44.9)[0], BTS.t
   row(`All ${mode} calibers build lists and solve`, 'no problems', bad.length ? bad.slice(0, 3).join('; ') + (bad.length > 3 ? ' …' : '') : 'no problems', bad.length === 0);
 });
 
+// Point-blank range: 308 Win 150 gr (2790 fps, G1 0.370), 1.5 in sight, 6 in vital zone (±3 in).
+{
+  const p = BTS.pointBlank(2790, 0.370, 1.5, 3);
+  row('Point-blank path peaks exactly at the zone edge', '+3.000 in', '+' + p.apexIn.toFixed(3) + ' in at ' + p.apexYd.toFixed(0) + ' yd', Math.abs(p.apexIn - 3) < 0.001);
+  row('Point-blank range for a 6 in zone', '268 to 272 yd', p.endYd.toFixed(1) + ' yd', p.endYd > 268 && p.endYd < 272);
+  row('Best zero for a 6 in zone', '228 to 234 yd', p.farZeroYd.toFixed(1) + ' yd', p.farZeroYd > 228 && p.farZeroYd < 234);
+  const sol = BTS.solve(2790, 0.370, 1.5, p.farZeroYd);
+  row('Zeroing at the best zero gives the same path', 'same bore angle', Math.abs(sol.angle - p.angle).toExponential(1) + ' rad apart', Math.abs(sol.angle - p.angle) < 1e-9);
+  const t = BTS.trajectoryTable(2790, 0.370, 1.5, p.angle, [p.endYd]);
+  row('Bullet is 3 in low at the point-blank range', '-3.00 in', t[0].y.toFixed(2) + ' in', Math.abs(t[0].y + 3) < 0.01);
+  const small = BTS.pointBlank(2790, 0.370, 1.5, 2);
+  row('A smaller zone gives a shorter point-blank range', '< ' + p.endYd.toFixed(0) + ' yd', small.endYd.toFixed(1) + ' yd', small.endYd < p.endYd && small.farZeroYd < p.farZeroYd);
+  const mine = BTS.pointBlankAt(2790, 0.370, 1.5, BTS.solve(2790, 0.370, 1.5, 100).angle, 3, 2000);
+  row('A 100 yd zero stays in the zone for less distance', '< ' + p.endYd.toFixed(0) + ' yd', mine.endYd.toFixed(1) + ' yd', mine.apexIn < 3 && mine.endYd < p.endYd);
+  const high = BTS.pointBlankAt(2790, 0.370, 1.5, BTS.solve(2790, 0.370, 1.5, 300).angle, 3, 2000);
+  row('A 300 yd zero rises above a 6 in zone', '> 3 in', '+' + high.apexIn.toFixed(2) + ' in', high.apexIn > 3);
+  const sightHigh = BTS.pointBlank(2790, 0.370, 3, 2);   // sight 3 in above the bore, ±2 in zone
+  row('A tall sight starts the zone a little out from the muzzle', '> 0 yd', sightHigh.startYd.toFixed(1) + ' yd', sightHigh.startYd > 0 && sightHigh.startYd < sightHigh.nearZeroYd);
+}
+
 document.getElementById('summary').textContent = `${pass} passed, ${fail} failed`;
 document.title = `TESTS ${pass} passed ${fail} failed`;
 </script>

@@ -18,6 +18,7 @@
     trajTable: $('traj-table'), trajNote: $('traj-note'), wind: $('wind'), windUnit: $('wind-unit'),
     windClock: $('wind-clock'), tMax: $('t-max'), tStep: $('t-step'), trajHint: $('traj-hint'), printCard: $('print-card'),
     cardClick: $('card-click'), cardHint: $('card-hint'), cardPreview: $('card-preview'),
+    pbrZone: $('pbr-zone'), pbrUnit: $('pbr-unit'), pbrUse: $('pbr-use'), pbrHint: $('pbr-hint'),
     cRange: $('c-range'), cClick: $('c-click'), cVert: $('c-vert'), cVdir: $('c-vdir'), cHoriz: $('c-horiz'), cHdir: $('c-hdir'),
     cElev: $('c-elev'), cElevSub: $('c-elev-sub'), cWind: $('c-wind'), cWindSub: $('c-wind-sub'),
     printSightin: $('print-sightin'),
@@ -39,6 +40,9 @@
   const WIND_DEFAULT_MPH = 10, KMH_PER_MPH = 1.609344;
   function windPref() { const v = parseFloat(loadPref('wind', '')); return v >= 0 && v < 100 ? v : WIND_DEFAULT_MPH; }
   function clockPref() { const v = parseInt(loadPref('windclock', '3'), 10); return v >= 1 && v <= 12 ? v : 3; }
+  // Vital zone for the point-blank range, kept in inches (6 in, about 15 cm, is a common deer-size zone).
+  const VITAL_DEFAULT_IN = 6, VITAL_MIN_IN = 1, VITAL_MAX_IN = 48;
+  function vitalPref() { const v = parseFloat(loadPref('vital', '')); return v >= VITAL_MIN_IN && v <= VITAL_MAX_IN ? v : VITAL_DEFAULT_IN; }
   // Trajectory table: out to `max` every `step`, plus a short first row when the step is longer.
   const TABLE_DEFAULTS = { rifle: { max: 300, step: 50 }, pistol: { max: 150, step: 25 }, shotgun: { max: 150, step: 25 } };
   const TABLE_SHORT = { rifle: 25, pistol: 10, shotgun: 10 };
@@ -63,6 +67,7 @@
     custom: false,      // true once the user edits velocity or B.C.
     barrel: null,       // { len, ref, rate } in inches and fps per inch; see resetBarrel()
     windMph: windPref(), // crosswind for the drift columns, kept in mph whatever the units
+    vitalIn: vitalPref(), // vital zone for the point-blank range, in inches
     windClock: clockPref(), // where the wind comes from, 1-12 o'clock (3 = from the right)
     table: tablePrefs(),    // trajectory table extent per firearm: { max, step } in the displayed distance unit
     result: null
@@ -262,6 +267,7 @@
     if (!(state.vFps >= 100 && state.vFps <= 6000)) r.error = 'Enter a muzzle velocity between ' + (metric() ? '30 and 1830 m/s.' : '100 and 6000 fps.');
     else if (!(state.bc >= 0.01 && state.bc <= 2)) r.error = 'Enter a ballistic coefficient between 0.010 and 2.000.';
     else {
+      r.loadOk = true;
       const sol = BTS.solve(state.vFps, state.bc, sightIn, zeroYd);
       if (sol.rising || !isFinite(sol.meetYd) || sol.meetYd <= 0) {
         r.error = '<strong>This load can’t be zeroed this close to the muzzle.</strong> The bullet is still rising near ' +
@@ -381,6 +387,52 @@
       'The click size is shared with “Adjust after your first shots”.';
   }
 
+  // Point-blank range: the longest dead-on distance for the vital zone, the zero that gives it, and what the chosen zero gives.
+  const PBR_MAX_YD = 2000;
+  function vitalDisplay() { return metric() ? Math.round(state.vitalIn * BTS.CM_PER_INCH * 10) / 10 : Math.round(state.vitalIn * 10) / 10; }
+  function renderPbr() {
+    const r = state.result, u = metric() ? { d: 'm', l: 'cm' } : { d: 'yd', l: 'in' };
+    const dist = yd => metric() ? yd * BTS.METERS_PER_YARD : yd, len = inch => metric() ? inch * BTS.CM_PER_INCH : inch;
+    const span = p => p.endYd == null ? `over ${Math.round(dist(PBR_MAX_YD))} ${u.d}` : `${Math.round(dist(p.startYd))}–${Math.round(dist(p.endYd))} ${u.d}`;
+    const half = state.vitalIn / 2, halfText = len(half).toFixed(1) + ' ' + u.l;
+    el.pbrUnit.textContent = u.l;
+    if (document.activeElement !== el.pbrZone) el.pbrZone.value = String(vitalDisplay());
+    const best = BTS.pointBlank(r.vFps, r.bc, r.sightIn, half, PBR_MAX_YD);
+    const $t = (id, text) => { document.getElementById(id).textContent = text; };
+    $t('pbr-best', span(best));
+    $t('pbr-best-sub', `Highest point +${halfText} at ${Math.round(dist(best.apexYd))} ${u.d}`);
+    const bestZero = dist(best.farZeroYd);
+    $t('pbr-zero', `${Math.round(bestZero)} ${u.d}`);
+    $t('pbr-zero-sub', best.nearZeroYd != null ? `Also crosses the sight line at ${Math.round(dist(best.nearZeroYd))} ${u.d}` : '');
+    // The chosen zero: within the zone only if its highest point stays inside it.
+    if (r.angle != null) {
+      const mine = BTS.pointBlankAt(r.vFps, r.bc, r.sightIn, r.angle, half, PBR_MAX_YD);
+      const over = mine.apexIn > half + 0.005;
+      $t('pbr-yours', over ? 'Rises too high' : span(mine));
+      $t('pbr-yours-sub', over ? `Your ${r.zero} ${u.d} zero rises ${len(mine.apexIn).toFixed(1)} ${u.l} at ${Math.round(dist(mine.apexYd))} ${u.d}, above the zone`
+        : `With your ${r.zero} ${u.d} zero`);
+    } else {
+      $t('pbr-yours', '–');
+      $t('pbr-yours-sub', 'This zero range can’t be used with this load');
+    }
+    // Zero choices come in steps; the best one is the farthest that doesn't rise above the zone.
+    const zeros = state.lists.zeros, pick = zeros.filter(z => z <= bestZero + 1e-9).pop();
+    if (pick == null) {
+      el.pbrUse.disabled = true;
+      el.pbrUse.textContent = 'Use best zero';
+      el.pbrUse.dataset.zero = '';
+    } else {
+      el.pbrUse.dataset.zero = String(zeros.indexOf(pick));
+      el.pbrUse.disabled = r.angle != null && pick === r.zero;
+      el.pbrUse.textContent = el.pbrUse.disabled ? `Using ${pick} ${u.d} zero` : `Use ${pick} ${u.d} zero`;
+    }
+    const steps = zeros.length > 1 ? zeros[1] - zeros[0] : 0;
+    el.pbrHint.textContent = `Aim dead-on and the bullet stays within ±${halfText} of your aim point (half the vital zone). ` +
+      (pick == null ? `The best zero is closer than the shortest zero choice (${zeros[0]} ${u.d}).`
+        : Math.abs(pick - bestZero) < 0.5 ? '' : `Zero choices go in ${steps} ${u.d} steps, so ${pick} ${u.d} is the closest one that doesn’t rise above the zone. `) +
+      'Standard atmosphere; confirm on paper.';
+  }
+
   // Shows the crosswind and table extent in the current units (the wind is stored in mph).
   function showWind() {
     const u = trajectoryUnits(), t = state.table[state.mode];
@@ -459,7 +511,10 @@
     el.error.innerHTML = r.error || '';
     el.solution.hidden = !ok;
     el.printTarget.disabled = el.printReport.disabled = el.printSightin.disabled = el.printCard.disabled = !ok;
-    document.getElementById('traj-card').hidden = document.getElementById('range-card').hidden = !ok;
+    ['traj-card', 'range-card'].forEach(id => { document.getElementById(id).hidden = !ok; });
+    // The point-blank range only needs a valid load, so it can still suggest a zero when the chosen one is refused.
+    document.getElementById('pbr-card').hidden = !r.loadOk;
+    if (r.loadOk) renderPbr();
     // The calculator's shot distance follows the zero range until the user types their own.
     if (!el.cRange.dataset.edited) el.cRange.value = String(r.zero);
     updateClicks();
@@ -1039,6 +1094,22 @@
   el.tStep.addEventListener('change', () => setTable(null, Number(el.tStep.value)));
   el.printCard.addEventListener('click', () => print('card'));
 
+  // Point-blank range: the vital zone is typed in the display unit and kept in inches.
+  el.pbrZone.addEventListener('input', () => {
+    const v = parseFloat(el.pbrZone.value), inches = metric() ? v / BTS.CM_PER_INCH : v;
+    if (!(inches >= VITAL_MIN_IN && inches <= VITAL_MAX_IN)) return;
+    state.vitalIn = inches;
+    savePref('vital', String(inches));
+    if (state.result && state.result.loadOk) renderPbr();
+  });
+  el.pbrZone.addEventListener('blur', () => { el.pbrZone.value = String(vitalDisplay()); });
+  el.pbrUse.addEventListener('click', () => {
+    if (el.pbrUse.dataset.zero === '') return;
+    el.zero.value = el.pbrUse.dataset.zero;
+    el.zero.dispatchEvent(new Event('change'));
+    toast(`Zero set to ${state.result.zero} ${metric() ? 'm' : 'yd'}`);
+  });
+
   // Rebuilds only the trajectory table (wind and table settings don't change the boresight solution).
   function refreshTable() {
     const r = state.result;
@@ -1182,7 +1253,7 @@
       saved: new Date().toISOString(),
       current: { name: suggestedName(), code: current, link: setupUrl(current) },
       setups: (readSaved() || []).map(s => ({ name: s.name, code: s.code, link: setupUrl(s.code) })),
-      settings: { windMph: state.windMph, windClock: state.windClock, click: el.cClick.value, table: JSON.parse(JSON.stringify(state.table)) }
+      settings: { windMph: state.windMph, windClock: state.windClock, click: el.cClick.value, vitalIn: state.vitalIn, table: JSON.parse(JSON.stringify(state.table)) }
     };
   }
   function exportSetups() {
@@ -1210,6 +1281,7 @@
     if (typeof s.windMph === 'number' && s.windMph >= 0 && s.windMph < 100) settings.windMph = s.windMph;
     if (Number.isInteger(s.windClock) && s.windClock >= 1 && s.windClock <= 12) settings.windClock = s.windClock;
     if (CLICK_VALUES.includes(s.click)) settings.click = s.click;
+    if (typeof s.vitalIn === 'number' && s.vitalIn >= VITAL_MIN_IN && s.vitalIn <= VITAL_MAX_IN) settings.vitalIn = s.vitalIn;
     if (s.table && typeof s.table === 'object') {
       settings.table = {};
       Object.keys(TABLE_DEFAULTS).forEach(mode => {
@@ -1229,6 +1301,7 @@
     if (st.windClock != null) { state.windClock = st.windClock; savePref('windclock', String(st.windClock)); }
     if (st.table) Object.keys(st.table).forEach(mode => { state.table[mode] = st.table[mode]; savePref('table.' + mode, st.table[mode].max + ':' + st.table[mode].step); });
     if (st.click) { el.cClick.value = el.cardClick.value = st.click; savePref('click', st.click); }
+    if (st.vitalIn != null) { state.vitalIn = st.vitalIn; savePref('vital', String(st.vitalIn)); }
     const list = readSaved();
     let added = 0, replaced = 0;
     if (list && f.setups.length) {

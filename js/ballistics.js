@@ -41,7 +41,7 @@
   }
 
   // Point-mass flight along the bore at `angle` (radians). Calls sample(xFt, yFt, vyFtPerS) at each step
-  // and stops once x passes maxFt. y is measured from the bore's starting point.
+  // and stops once x passes maxFt (or when sample returns true). y is measured from the bore's starting point.
   function fly(v0, bc, angle, maxFt, sample) {
     const k = RHO * Math.PI / (8 * bc * 144);
     let x = 0, y = 0, t = 0, vx = v0 * Math.cos(angle), vy = v0 * Math.sin(angle);
@@ -54,7 +54,7 @@
       t += DT;
       vx -= a * vx * DT;
       vy -= (a * vy + GRAVITY) * DT;
-      sample(x, y, vy, vx, t);
+      if (sample(x, y, vy, vx, t) === true) return;
     }
   }
 
@@ -140,6 +140,44 @@
       }
     }
     return null;
+  }
+
+  // Point-blank range for a bore angle: where the bullet stays within ±radiusIn of the sight line.
+  // Returns { startYd, nearZeroYd, apexYd, apexIn, farZeroYd, endYd }; endYd is null if the bullet never drops
+  // radiusIn below the line within maxYd, and startYd > 0 only when the sight sits more than radiusIn above the bore.
+  function pointBlankAt(v0, bc, sightIn, angle, radiusIn, maxYd, apexOnly) {
+    const out = { startYd: null, nearZeroYd: null, apexYd: 0, apexIn: -sightIn, farZeroYd: null, endYd: null };
+    let px = 0, py = -sightIn, done = false;
+    const cross = (x, y, level) => (px + (level - py) / (y - py) * (x - px)) / 3;
+    fly(v0, bc, angle, maxYd * 3, (x, yFt, vy) => {
+      if (done) return true;
+      if (apexOnly && x > 0 && vy < 0) return true;   // the bisection only needs the top of the arc
+      const y = yFt * 12 - sightIn;
+      if (x > 0) {
+        if (out.startYd === null && y >= -radiusIn) out.startYd = py >= -radiusIn ? 0 : cross(x, y, -radiusIn);
+        if (out.nearZeroYd === null && py < 0 && y >= 0) out.nearZeroYd = cross(x, y, 0);
+        if (y > out.apexIn) { out.apexIn = y; out.apexYd = x / 3; }
+        if (out.farZeroYd === null && out.apexIn > 0 && py > 0 && y <= 0) out.farZeroYd = cross(x, y, 0);
+        if (out.startYd !== null && py > -radiusIn && y <= -radiusIn) { out.endYd = cross(x, y, -radiusIn); done = true; }
+      }
+      px = x; py = y;
+    });
+    if (out.startYd === null) out.startYd = 0;
+    return out;
+  }
+
+  // Maximum point-blank range: the bore angle whose highest point is exactly radiusIn above the sight line,
+  // so the bullet stays inside a vital zone of 2 x radiusIn for the longest distance. The best zero is where
+  // that path comes back down through the sight line.
+  function pointBlank(v0, bc, sightIn, radiusIn, maxYd = 2000) {
+    const apexOf = a => pointBlankAt(v0, bc, sightIn, a, radiusIn, maxYd, true);
+    let lo = 0, hi = 0.002;
+    for (let i = 0; i < 20 && apexOf(hi).apexIn < radiusIn; i++) { lo = hi; hi *= 2; }
+    for (let i = 0; i < 40; i++) {
+      const mid = (lo + hi) / 2;
+      if (apexOf(mid).apexIn < radiusIn) lo = mid; else hi = mid;
+    }
+    return Object.assign({ angle: lo }, pointBlankAt(v0, bc, sightIn, lo, radiusIn, maxYd));
   }
 
   // Scope adjustment for a group that landed offsetIn inches from the aim point at rangeYd yards.
@@ -284,7 +322,7 @@
   }
 
   window.BTS = {
-    roundHalfEven, solve, trajectory, trajectoryTable, nearZero, clicks, energyFtLb, laserOffset, windDriftIn, angleOf,
+    roundHalfEven, solve, trajectory, trajectoryTable, nearZero, pointBlank, pointBlankAt, clicks, energyFtLb, laserOffset, windDriftIn, angleOf,
     calibers, sightHeights, weights, v1Weights, shapes, typicalVelocityFps, typicalBc, zeroRanges, targetRanges,
     MODES, GAUGES, SLUGS, CM_PER_INCH, METERS_PER_YARD,
     ATMOSPHERE: { densityLbFt3: RHO, soundFps: SOUND }

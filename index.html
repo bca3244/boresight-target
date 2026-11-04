@@ -237,6 +237,26 @@
         <div id="chart" class="chart"></div>
       </div>
 
+      <div class="card" id="pbr-card" data-collapse="pbr">
+        <div class="chart-head">
+          <h2>Point-blank range</h2>
+          <p class="muted">How far you can aim dead-on and still hit the vital zone, with no holdover.</p>
+        </div>
+        <div class="traj-tools">
+          <label class="mini t-field">
+            <span>Vital zone</span>
+            <span class="input-unit"><input id="pbr-zone" type="number" inputmode="decimal" min="1" max="48" step="any"><span id="pbr-unit">in</span></span>
+          </label>
+          <button type="button" class="btn" id="pbr-use" title="Set the zero range to the best choice for this vital zone">Use best zero</button>
+        </div>
+        <div class="pbr-out">
+          <div class="dial"><span class="field-label">Best possible</span><span class="dial-value" id="pbr-best">–</span><span class="hint" id="pbr-best-sub"></span></div>
+          <div class="dial"><span class="field-label">Best zero</span><span class="dial-value" id="pbr-zero">–</span><span class="hint" id="pbr-zero-sub"></span></div>
+          <div class="dial"><span class="field-label">With your zero</span><span class="dial-value" id="pbr-yours">–</span><span class="hint" id="pbr-yours-sub"></span></div>
+        </div>
+        <p class="hint traj-hint" id="pbr-hint"></p>
+      </div>
+
       <div class="card" id="traj-card" data-collapse="trajectory">
         <div class="chart-head">
           <h2>Trajectory</h2>

@@ -229,6 +229,35 @@ function set(d, id, value, ev = 'input') { const e = d.getElementById(id); e.val
     row('Default range card is 3 x 5 in', '5 × 3 in', texts.find(x => /Cut along/.test(x)) || 'missing', texts.some(x => /5 × 3 in/.test(x)));
   }
 
+  // Point-blank range card with the default 308 (100 yd zero) and a 6 in vital zone.
+  try { frame.contentWindow.localStorage.removeItem('bts.vital'); } catch (e) { /* storage blocked */ }
+  await load('');
+  {
+    const d = frame.contentDocument, w = frame.contentWindow, txt = id => d.getElementById(id).textContent;
+    row('Point-blank card sits after the chart', 'before the trajectory table', d.getElementById('pbr-card').nextElementSibling.id, d.getElementById('pbr-card').nextElementSibling.id === 'traj-card');
+    row('Vital zone defaults to 6 in', '6 in', d.getElementById('pbr-zone').value + ' ' + txt('pbr-unit'), d.getElementById('pbr-zone').value === '6' && txt('pbr-unit') === 'in');
+    row('Best point-blank range for the default 308', '0–270 yd', txt('pbr-best'), txt('pbr-best') === '0–270 yd');
+    row('Best zero for the default 308', '231 yd', txt('pbr-zero'), txt('pbr-zero') === '231 yd');
+    row('Point-blank range with the 100 yd zero', 'shorter than 270 yd', txt('pbr-yours') + ' · ' + txt('pbr-yours-sub'), /^0–1\d\d yd$/.test(txt('pbr-yours')) && /100 yd zero/.test(txt('pbr-yours-sub')));
+    row('Button offers the nearest zero choice not above the best', 'Use 225 yd zero', txt('pbr-use'), txt('pbr-use') === 'Use 225 yd zero' && !d.getElementById('pbr-use').disabled);
+    d.getElementById('pbr-use').click();
+    row('Using it sets the zero and updates the table', '225 yd zero, table has 225', sel2(d, 'zero') + ', ' + (d.querySelector('#traj-table tr.zero-row td')?.textContent || ''),
+        sel2(d, 'zero') === '225 yd' && /^225/.test(d.querySelector('#traj-table tr.zero-row td')?.textContent || ''));
+    row('With the 225 yd zero, almost the full range', '0–26x yd, button shows it is in use', txt('pbr-yours') + ' · ' + txt('pbr-use'),
+        /^0–26\d yd$/.test(txt('pbr-yours')) && d.getElementById('pbr-use').disabled && txt('pbr-use') === 'Using 225 yd zero');
+    set(d, 'pbr-zone', '4');
+    row('A 4 in zone shortens the range and the best zero', 'best under 270, zero under 231', txt('pbr-best') + ' · ' + txt('pbr-zero'),
+        parseInt(txt('pbr-best').split('–')[1], 10) < 270 && parseInt(txt('pbr-zero'), 10) < 231);
+    row('The 225 yd zero now rises above a 4 in zone', 'Rises too high', txt('pbr-yours') + ' · ' + txt('pbr-yours-sub'), txt('pbr-yours') === 'Rises too high' && /above the zone/.test(txt('pbr-yours-sub')));
+    let saved = null; try { saved = w.localStorage.getItem('bts.vital'); } catch (e) { saved = 'n/a'; }
+    row('Vital zone is remembered', '4', String(saved), saved === '4' || saved === 'n/a');
+    d.querySelector('[data-units="metric"]').click();
+    row('Metric shows the zone in cm and ranges in m', '10.2 cm, m', d.getElementById('pbr-zone').value + ' ' + txt('pbr-unit') + ', ' + txt('pbr-best'),
+        d.getElementById('pbr-zone').value === '10.2' && txt('pbr-unit') === 'cm' && / m$/.test(txt('pbr-best')));
+    d.querySelector('[data-units="english"]').click();
+    try { w.localStorage.removeItem('bts.vital'); } catch (e) { /* storage blocked */ }
+  }
+
   // Range card section on the page: the same drawing as the printout, its own click selector kept in step with the calculator.
   await load('');
   {
@@ -310,7 +339,7 @@ function set(d, id, value, ev = 'input') { const e = d.getElementById(id); e.val
   {
     const d = frame.contentDocument, w = frame.contentWindow;   // the barrel checks above reloaded the page
     const cards = Array.from(d.querySelectorAll('[data-collapse]'));
-    row('Every main card is collapsible', '6 cards with a chevron', cards.filter(c => c.querySelector('.fold-btn')).length + ' cards', cards.length === 6 && cards.every(c => c.querySelector('.fold-btn')));
+    row('Every main card is collapsible', '7 cards with a chevron', cards.filter(c => c.querySelector('.fold-btn')).length + ' cards', cards.length === 7 && cards.every(c => c.querySelector('.fold-btn')));
     // Each card's body must actually disappear when folded (a card-specific style once kept the click calculator open).
     const stuck = cards.filter(c => {
       c.querySelector('.fold-btn').click();
