@@ -42,6 +42,9 @@ function set(d, id, value, ev = 'input') { const e = d.getElementById(id); e.val
       d.querySelector('[data-plot="full"]').getAttribute('aria-pressed') === 'true' && d.querySelector('[data-plot="near"]').getAttribute('aria-pressed') === 'false');
   const sel = id => d.getElementById(id).selectedOptions[0]?.textContent || '';
   const defaultHash = w.location.hash;
+  // A style that sets display on an element overrides its hidden attribute; every hidden element must really be hidden.
+  const leaks = Array.from(d.querySelectorAll('[hidden]')).filter(e => getComputedStyle(e).display !== 'none').map(e => e.id || e.className || e.tagName);
+  row('Everything marked hidden is off the screen', 'none showing', leaks.length ? 'showing: ' + leaks.join(', ') : 'none showing', leaks.length === 0);
   try { w.localStorage.removeItem('bts.wind'); } catch (e) { /* storage blocked */ }
 
   // Caliber search.
@@ -392,16 +395,17 @@ function set(d, id, value, ev = 'input') { const e = d.getElementById(id); e.val
   await load('');
   if (storageOk) {
     let d = frame.contentDocument, w = frame.contentWindow, $ = id => d.getElementById(id);
+    const shown = id => getComputedStyle($(id)).display !== 'none';
     w.localStorage.removeItem('bts.loads');
     await load('');
     d = frame.contentDocument; w = frame.contentWindow;
     row('Add-load form starts hidden, with the current load', 'hidden; 150 / 2790 / 0.370 after opening',
-        ($('load-form').hidden ? 'hidden; ' : 'shown; ') + ($('load-add').click(), `${$('lf-weight').value} / ${$('lf-velocity').value} / ${$('lf-bc').value}`),
-        $('lf-weight').value === '150' && $('lf-bc').value === $('bc').value && $('lf-velocity').value === $('velocity').value && !$('load-form').hidden);
+        (!shown('load-form') ? 'hidden; ' : 'shown; ') + ($('load-add').click(), `${$('lf-weight').value} / ${$('lf-velocity').value} / ${$('lf-bc').value}`),
+        $('lf-weight').value === '150' && $('lf-bc').value === $('bc').value && $('lf-velocity').value === $('velocity').value && shown('load-form'));
     set(d, 'lf-name', 'Test 168 handload'); set(d, 'lf-weight', '168'); set(d, 'lf-velocity', '2650'); set(d, 'lf-bc', '0.462');
     $('lf-save').click();
     row('Saving a load selects it', 'Test 168 handload · 168 gr · 2650 fps · 0.462', `${sel2(d, 'caliber')} · ${sel2(d, 'weight')} · ${$('velocity').value} fps · ${$('bc').value}`,
-        sel2(d, 'caliber') === 'Test 168 handload' && sel2(d, 'weight') === '168 gr' && $('velocity').value === '2650' && $('bc').value === '0.462' && $('load-form').hidden);
+        sel2(d, 'caliber') === 'Test 168 handload' && sel2(d, 'weight') === '168 gr' && $('velocity').value === '2650' && $('bc').value === '0.462' && !shown('load-form'));
     row('Its weight and shape are fixed', 'both disabled', $('weight').disabled && $('shape').disabled ? 'both disabled' : 'editable', $('weight').disabled && $('shape').disabled);
     const groups = Array.from(d.querySelectorAll('#caliber optgroup')).map(g => g.label + ' ' + g.children.length);
     row('My loads come first in the caliber list', 'My loads 1, Calibers 189', groups.join(', '), groups.join(', ') === 'My loads 1, Calibers 189');
@@ -429,8 +433,9 @@ function set(d, id, value, ev = 'input') { const e = d.getElementById(id); e.val
     $('lf-save').click();
     row('Editing replaces the load', '2700 fps, still 1 load', $('velocity').value + ' fps, ' + JSON.parse(w.localStorage.getItem('bts.loads')).length + ' load', $('velocity').value === '2700' && JSON.parse(w.localStorage.getItem('bts.loads')).length === 1);
     $('load-add').click(); set(d, 'lf-name', 'Bad'); set(d, 'lf-velocity', '50'); $('lf-save').click();
-    row('A bad velocity is refused', 'Enter a muzzle velocity…', $('lf-note').textContent, /muzzle velocity/.test($('lf-note').textContent) && !$('load-form').hidden);
+    row('A bad velocity is refused', 'Enter a muzzle velocity…', $('lf-note').textContent, /muzzle velocity/.test($('lf-note').textContent) && shown('load-form'));
     $('lf-cancel').click();
+    row('Cancel closes the form', 'not shown', shown('load-form') ? 'still shown' : 'not shown', !shown('load-form'));
     d.querySelector('[data-units="metric"]').click();
     row('In metric the load shows in grams and m/s', '10.89 g · 823 m/s', sel2(d, 'weight') + ' · ' + $('velocity').value + ' m/s', sel2(d, 'weight') === '10.89 g' && $('velocity').value === '823' && sel2(d, 'caliber') === 'Test 168 handload');
     d.querySelector('[data-units="english"]').click();
