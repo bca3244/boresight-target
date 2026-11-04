@@ -247,6 +247,27 @@ function set(d, id, value, ev = 'input') { const e = d.getElementById(id); e.val
     set(d, 'wind', '20');
     row('Card follows the crosswind', '300 yd wind 22 R', at300(), / 22 R /.test(at300()));
     set(d, 'wind', '10'); d.getElementById('wind').dispatchEvent(new Event('blur'));
+
+    // Zoom: the range card fills the window, its drawing grows, and Escape or the button restores it.
+    const zoom = d.getElementById('card-zoom'), svgW = () => d.querySelector('#card-preview svg').getBoundingClientRect().width;
+    const w0 = svgW();
+    zoom.click();
+    const rc = card.getBoundingClientRect(), win = frame.contentWindow;
+    row('Zoom button maximizes the range card', 'fills the window', card.classList.contains('maximized') && getComputedStyle(card).position === 'fixed' ? `${Math.round(rc.width)} x ${Math.round(rc.height)}` : 'not maximized',
+        card.classList.contains('maximized') && Math.round(rc.width) === win.innerWidth && Math.round(rc.height) === win.innerHeight);
+    row('Maximized card drawing is larger', '> ' + Math.round(w0) + ' px', Math.round(svgW()) + ' px', svgW() > w0 * 1.3);
+    row('Maximized card keeps the print button and click size', 'both visible', ['print-card', 'card-click'].map(id => d.getElementById(id).getBoundingClientRect().width > 0 ? id : 'hidden').join(', '),
+        ['print-card', 'card-click'].every(id => d.getElementById(id).getBoundingClientRect().width > 0));
+    d.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    row('Escape restores the range card', 'restored', card.classList.contains('maximized') ? 'still maximized' : 'restored', !card.classList.contains('maximized') && Math.abs(svgW() - w0) < 1);
+    zoom.click(); zoom.click();
+    row('Zoom button restores it too', 'restored, label Maximize', (card.classList.contains('maximized') ? 'maximized' : 'restored') + ', label ' + zoom.getAttribute('aria-label').split(' ')[0],
+        !card.classList.contains('maximized') && zoom.getAttribute('aria-label') === 'Maximize range card' && !d.body.classList.contains('card-open'));
+    const chartCard = d.querySelector('.chart-card');
+    d.getElementById('chart-zoom').click();
+    const chartOk = chartCard.classList.contains('maximized') && chartCard.querySelector('#chart svg').getBoundingClientRect().height > 500;
+    d.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    row('Chart zoom still works', 'maximized, then restored', chartOk ? (chartCard.classList.contains('maximized') ? 'stuck maximized' : 'maximized, then restored') : 'not maximized', chartOk && !chartCard.classList.contains('maximized'));
   }
 
   // Barrel length: 16 in barrel on the default 308 (test barrel 24 in, 25 fps per in) = 200 fps slower.

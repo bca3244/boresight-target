@@ -1282,19 +1282,29 @@
     return t && !t.meet ? t.value : null;
   }
 
-  // Chart zoom: the chart card fills the window; Escape or the button restores it.
+  // Zoom: a card fills the window; Escape or the button restores it. Used by the chart and the range card.
+  function setCardMax(card, btn, name, bodyClass, on) {
+    // Maximizing a collapsed card opens it first.
+    if (on && card.classList.contains('collapsed')) card.querySelector('.fold-btn').click();
+    card.classList.toggle('maximized', on);
+    document.body.classList.toggle(bodyClass, on);
+    btn.setAttribute('aria-pressed', String(on));
+    btn.setAttribute('aria-label', (on ? 'Restore ' : 'Maximize ') + name);
+    btn.title = on ? `Restore ${name} (Esc)` : 'Maximize ' + name;
+  }
   function setChartMax(on) {
-    // Maximizing a collapsed chart opens it first.
-    if (on && el.chartCard.classList.contains('collapsed')) el.chartCard.querySelector('.fold-btn').click();
-    el.chartCard.classList.toggle('maximized', on);
-    document.body.classList.toggle('chart-open', on);
-    el.chartZoom.setAttribute('aria-pressed', String(on));
-    el.chartZoom.setAttribute('aria-label', on ? 'Restore chart' : 'Maximize chart');
-    el.chartZoom.title = on ? 'Restore chart (Esc)' : 'Maximize chart';
+    setCardMax(el.chartCard, el.chartZoom, 'chart', 'chart-open', on);
     if (state.result && !state.result.error) drawChart();
   }
+  const rangeCard = document.getElementById('range-card'), cardZoom = document.getElementById('card-zoom');
+  const setRangeCardMax = on => setCardMax(rangeCard, cardZoom, 'range card', 'card-open', on);
   el.chartZoom.addEventListener('click', () => setChartMax(!el.chartCard.classList.contains('maximized')));
-  document.addEventListener('keydown', e => { if (e.key === 'Escape' && el.chartCard.classList.contains('maximized')) setChartMax(false); });
+  cardZoom.addEventListener('click', () => setRangeCardMax(!rangeCard.classList.contains('maximized')));
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    if (el.chartCard.classList.contains('maximized')) setChartMax(false);
+    if (rangeCard.classList.contains('maximized')) setRangeCardMax(false);
+  });
 
   // Collapsible cards: the first child is the header; everything after it is wrapped in a body that hides.
   // Clicking the title or the chevron toggles it (other controls in the header keep working), and each card remembers its state.

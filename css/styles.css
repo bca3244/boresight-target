@@ -196,8 +196,8 @@ h2.card-head { flex-wrap: nowrap; }
 .setup .card-body, .hero .card-body, #clicks-card .card-body { display: grid; gap: 16px; }
 .hero .card-body { gap: 14px; }
 #clicks-card .card-body { gap: 12px; }
-.chart-card.maximized .fold-btn { display: none; }
-.chart-card.maximized .card-body { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.card.maximized .fold-btn { display: none; }
+.card.maximized .card-body { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 
 /* ---------- Barrel length ---------- */
 .barrel-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
@@ -275,19 +275,19 @@ table.data .sep { border-left: 1px solid var(--border); }
 .dial-value b { color: var(--accent); }
 
 /* ---------- Chart tools and maximized view ---------- */
-.chart-tools { display: flex; align-items: center; gap: 8px; }
+.chart-tools { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 .icon-btn {
   display: inline-grid; place-items: center; width: 34px; height: 34px; padding: 0;
   border-radius: 9px; border: 1px solid var(--border-strong); background: var(--bg); color: var(--muted); cursor: pointer;
 }
 .icon-btn:hover { color: var(--text); border-color: #46597a; }
 .icon-btn svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.icon-btn .i-collapse, .chart-card.maximized .icon-btn .i-expand { display: none; }
-.chart-card.maximized .icon-btn .i-collapse { display: block; }
+.icon-btn .i-collapse, .card.maximized .icon-btn .i-expand { display: none; }
+.card.maximized .icon-btn .i-collapse { display: block; }
 .sw.rise { width: 9px; height: 9px; border-radius: 50%; background: var(--path); box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px var(--path); }
 .rise-note { color: var(--text); }
-body.chart-open { overflow: hidden; }
-.chart-card.maximized {
+body.chart-open, body.card-open { overflow: hidden; }
+.card.maximized {
   position: fixed; inset: 0; z-index: 50; border-radius: 0; border: 0;
   display: flex; flex-direction: column; padding: 20px 24px;
   background: var(--bg);
@@ -359,3 +359,7 @@ body.previewing #print-root { display: block; width: max-content; margin: 24px a
   .sheet svg { display: block; }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+/* Range card maximized: the card drawing fills the space under the tools. */
+#range-card.maximized .card-preview { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
+#range-card.maximized .card-preview svg { width: 100%; height: 100%; max-width: none !important; box-shadow: none; border-radius: 0; }

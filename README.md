@@ -10,7 +10,7 @@ A web page that prints a true-scale laser boresight target for your firearm, sig
 - Search the caliber list, and save named setups in your browser.
 - Save to file downloads a JSON file with your saved setups, the current setup and the table, wind and click settings; Load from file adds them back (on any device or browser). A saved setup with the same name is replaced.
 - The trajectory table shows the bullet path and wind drift in inches (cm), MOA and mil. You choose how far it goes and the step (up to 40 ranges), the wind speed (10 mph by default) and the direction it comes from (o'clock).
-- A range card below the trajectory table shows the scope clicks to dial for elevation and wind at each range, exactly as it prints (3 x 5 in, or 4 x 6 in for long tables). Its click size is shared with the click calculator.
+- A range card below the trajectory table shows the scope clicks to dial for elevation and wind at each range, exactly as it prints (3 x 5 in, or 4 x 6 in for long tables). Its click size is shared with the click calculator, and its zoom button (like the chart's) fills the window with the card.
 - Works offline after the first visit, and can be installed as an app (Install app button in Chrome, Edge and Android; Share, then Add to Home Screen on iPhone and iPad).
 - Every setting is kept in a short code after the `#`, so a link opens the exact same setup. Each printed sheet carries a QR code of that link.
 
