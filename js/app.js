@@ -16,7 +16,7 @@
     savedName: $('saved-name'), savedSave: $('saved-save'), savedNote: $('saved-note'), savedCount: $('saved-count'),
     savedExport: $('saved-export'), savedImport: $('saved-import'), savedFile: $('saved-file'),
     trajTable: $('traj-table'), trajNote: $('traj-note'), wind: $('wind'), windUnit: $('wind-unit'),
-    windClock: $('wind-clock'), slope: $('slope'), tMax: $('t-max'), tStep: $('t-step'), trajHint: $('traj-hint'), printCard: $('print-card'),
+    windClock: $('wind-clock'), slope: $('slope'), compare: $('compare'), compareKey: $('compare-key'), compareName: $('compare-name'), compareNote: $('compare-note'), tMax: $('t-max'), tStep: $('t-step'), trajHint: $('traj-hint'), printCard: $('print-card'),
     cardClick: $('card-click'), cardHint: $('card-hint'), cardPreview: $('card-preview'),
     pbrZone: $('pbr-zone'), pbrUnit: $('pbr-unit'), pbrUse: $('pbr-use'), pbrHint: $('pbr-hint'),
     cRange: $('c-range'), cClick: $('c-click'), cVert: $('c-vert'), cVdir: $('c-vdir'), cHoriz: $('c-horiz'), cHdir: $('c-hdir'),
@@ -75,8 +75,9 @@
     windClock: clockPref(), // where the wind comes from, 1-12 o'clock (3 = from the right)
     slopeDeg: slopePref(),  // shot angle in degrees, + uphill
     table: tablePrefs(),    // trajectory table extent per firearm: { max, step } in the displayed distance unit
-    loads: readLoads() || [], // my loads (every firearm type), see normLoad()
+    loads: [],           // my loads (every firearm type), see normLoad(); read from storage below, once their limits exist
     linkLoad: null,      // a load opened from a link that isn't in my loads
+    compare: '',         // what the chart and table compare with (see buildCompare); '' = nothing. Not kept or shared.
     result: null
   };
   const metric = () => state.units === 'metric';
@@ -122,6 +123,7 @@
   function writeLoads() {
     try { localStorage.setItem('bts.loads', JSON.stringify(state.loads)); return true; } catch (e) { return false; }
   }
+  state.loads = readLoads() || [];
   const sameLoad = (a, b) => a.mode === b.mode && a.name === b.name && a.grains === b.grains && a.fps === b.fps && a.bc === b.bc;
   function modeLoads() {
     const list = state.loads.filter(l => l.mode === state.mode);
@@ -364,6 +366,7 @@
         const nz = BTS.nearZero(state.vFps, state.bc, sightIn, sol.angle, zeroYd);
         r.nearZero = nz == null ? null : (metric() ? nz * BTS.METERS_PER_YARD : nz);
         r.table = trajectoryRows(sol.angle, sightIn, zero, zeroYd);
+        addCompare(r);
       }
     }
     state.result = r;
@@ -430,25 +433,31 @@
     return side ? `${windDisplay()} ${u.w} from ${state.windClock} o'clock` : 'no crosswind';
   }
   // The page shows the wind in the controls above the table, so its header only names the direction.
-  function trajectoryHead(u, withWind) {
+  // `b` (page only): the comparison, which adds its bullet path and drift after the drift columns.
+  function trajectoryHead(u, withWind, b) {
     const side = driftSide(), label = withWind ? `Drift${side ? ' ' + side : ''}, ${windText(u)}` : (side ? 'Drift ' + side : 'Drift (no crosswind)');
-    return `<tr><th></th><th class="grp sep" colspan="3">Bullet vs. sight line</th><th class="grp sep" colspan="3">${label}</th><th class="sep" colspan="3"></th></tr>` +
+    const bName = b ? (b.label.length > 26 ? b.label.slice(0, 25) + '…' : b.label) : '';
+    return `<tr><th></th><th class="grp sep" colspan="3">Bullet vs. sight line</th><th class="grp sep" colspan="3">${label}</th>` +
+      (b ? `<th class="grp sep cmp" colspan="2" title="${esc(b.label)}">B: ${esc(bName)}</th>` : '') + `<th class="sep" colspan="3"></th></tr>` +
       `<tr><th>Range (${u.d})</th><th class="sep">${u.h}</th><th>MOA</th><th>mil</th><th class="sep">${u.h}</th><th>MOA</th><th>mil</th>` +
+      (b ? `<th class="sep cmp">Path ${u.h}</th><th class="cmp">Drift ${u.h}</th>` : '') +
       `<th class="sep">Velocity (${u.v})</th><th>Energy (${u.e})</th><th>Time (s)</th></tr>`;
   }
-  function trajectoryCells(row, pathClass) {
+  function trajectoryCells(row, pathClass, b) {
     return `<td class="sep${pathClass}">${signed(row.path, 2)}</td><td>${signed(row.pathMoa, 1)}</td><td>${signed(row.pathMil, 2)}</td>` +
       `<td class="sep">${row.drift.toFixed(2)}</td><td>${row.driftMoa.toFixed(1)}</td><td>${row.driftMil.toFixed(2)}</td>` +
+      (b ? `<td class="sep cmp">${signed(row.b.path, 2)}</td><td class="cmp">${row.b.drift.toFixed(2)}</td>` : '') +
       `<td class="sep">${Math.round(row.velocity)}</td><td>${Math.round(row.energy)}</td><td>${row.time.toFixed(3)}</td>`;
   }
 
   function renderTable() {
-    const r = state.result, u = trajectoryUnits();
-    let h = `<thead>${trajectoryHead(u)}</thead><tbody>`;
+    const r = state.result, u = trajectoryUnits(), b = r.b && !r.b.error ? r.b : null;
+    let h = `<thead>${trajectoryHead(u, false, b)}</thead><tbody>`;
     r.table.forEach(row => {
       const cls = row.path > 0.005 ? ' up' : row.path < -0.005 ? ' down' : '';
-      h += `<tr${row.zero ? ' class="zero-row"' : ''}><td>${row.range}${row.zero ? ' <span class="tag">zero</span>' : ''}</td>${trajectoryCells(row, cls)}</tr>`;
+      h += `<tr${row.zero ? ' class="zero-row"' : ''}><td>${row.range}${row.zero ? ' <span class="tag">zero</span>' : ''}</td>${trajectoryCells(row, cls, b)}</tr>`;
     });
+    showCompare();
     el.trajTable.innerHTML = h + '</tbody>';
     el.trajNote.textContent = (r.nearZero != null ? `Near zero ${r.nearZero.toFixed(1)} ${u.d} · ` : '') + `Max rise ${riseText(r.rise)}` + (state.slopeDeg ? ' (level ground)' : '');
     el.trajHint.textContent = (state.tableCut ? `Showing the first ${TABLE_ROWS} ranges; choose a longer step to see farther. ` : '') +
@@ -585,6 +594,7 @@
   // ---------- Rendering ----------
 
   function render(keepTarget) {
+    buildCompare();
     const r = compute();
     showLoadTools();
     const ok = !r.error;
@@ -599,7 +609,7 @@
     // The calculator's shot distance follows the zero range until the user types their own.
     if (!el.cRange.dataset.edited) el.cRange.value = String(r.zero);
     updateClicks();
-    if (!ok) { el.chart.innerHTML = ''; syncUrl(); return; }
+    if (!ok) { el.chart.innerHTML = ''; el.compareKey.hidden = el.compareNote.hidden = true; syncUrl(); return; }
     buildTargets(keepTarget);
     el.meet.textContent = r.meet.toFixed(1);
     el.meetUnit.textContent = metric() ? 'm' : 'yd';
@@ -745,7 +755,8 @@
     return (n < 1.5 ? 1 : n < 3 ? 2 : n < 7 ? 5 : 10) * mag;
   }
 
-  function chartData() {
+  // `withB` (the page chart only): also the comparison's bullet path.
+  function chartData(withB) {
     const r = state.result, t = currentTarget();
     const toDisp = metric() ? BTS.METERS_PER_YARD : 1;      // yards -> display distance
     const yScale = metric() ? BTS.CM_PER_INCH : 1;          // inches -> display height
@@ -754,8 +765,10 @@
       : r.zeroYd * 1.12;
     const pts = BTS.trajectory(r.vFps, r.bc, r.sightIn, r.angle, xMaxYd, xMaxYd / 240)
       .map(p => ({ x: p.x * toDisp, y: p.y * yScale }));
+    const b = withB && r.b && !r.b.error ? r.b : null;
+    const ptsB = b ? BTS.trajectory(b.vFps, b.bc, b.sightIn, b.angle, xMaxYd, xMaxYd / 240).map(p => ({ x: p.x * toDisp, y: p.y * yScale })) : null;
     const h = r.sightIn * yScale, meet = r.meet;
-    return { pts, h, meet, rise: r.rise, xMax: xMaxYd * toDisp, target: t, yScale,
+    return { pts, ptsB, h, meet, rise: r.rise, xMax: xMaxYd * toDisp, target: t, yScale,
       laserAt: x => -h + h * x / meet,
       xUnit: metric() ? 'm' : 'yd', yUnit: metric() ? 'cm' : 'in' };
   }
@@ -767,7 +780,8 @@
     const m = { l: Math.round(fs * 4.3), r: 18, t: 18, b: Math.round(fs * 3.3) };
     const iw = w - m.l - m.r, ih = h - m.t - m.b;
     const riseShown = d.rise && d.rise.y > 0.005 && d.rise.x <= d.xMax;
-    let yMin = Math.min(-d.h, ...d.pts.map(p => p.y)), yMax = Math.max(d.laserAt(d.xMax), ...d.pts.map(p => p.y), 0);
+    const all = d.ptsB ? d.pts.concat(d.ptsB) : d.pts;
+    let yMin = Math.min(-d.h, ...all.map(p => p.y)), yMax = Math.max(d.laserAt(d.xMax), ...all.map(p => p.y), 0);
     const pad = (yMax - yMin) * 0.08 || 0.1;
     yMin -= pad; yMax += pad;
     const ys = niceStep(yMax - yMin, 7), xs = niceStep(d.xMax, 9);
@@ -788,6 +802,10 @@
     const path = d.pts.map((p, i) => (i ? 'L' : 'M') + X(p.x).toFixed(1) + ' ' + Y(p.y).toFixed(1)).join('');
     s += `<line x1="${X(0)}" y1="${Y(0)}" x2="${X(d.xMax)}" y2="${Y(0)}" stroke="${colors.los}" stroke-width="2.25"/>`;
     s += `<path d="${path}" fill="none" stroke="${colors.path}" stroke-width="2.25" stroke-linejoin="round"/>`;
+    if (d.ptsB) {
+      const pathB = d.ptsB.map((p, i) => (i ? 'L' : 'M') + X(p.x).toFixed(1) + ' ' + Y(p.y).toFixed(1)).join('');
+      s += `<path class="cmp-path" d="${pathB}" fill="none" stroke="${colors.compare}" stroke-width="2.25" stroke-dasharray="7 5" stroke-linejoin="round"/>`;
+    }
     s += `<line x1="${X(0)}" y1="${Y(-d.h)}" x2="${X(d.xMax)}" y2="${Y(d.laserAt(d.xMax))}" stroke="${colors.laser}" stroke-width="2.25"/>`;
 
     if (!d.target.meet && d.target.range <= d.xMax) {
@@ -816,18 +834,18 @@
 
   function screenColors() {
     const cs = getComputedStyle(document.documentElement), v = n => cs.getPropertyValue(n).trim();
-    return { grid: v('--border'), axis: v('--faint'), tick: v('--muted'), title: v('--text'), los: v('--los'), path: v('--path'), laser: v('--laser'), accent: v('--accent'), bg: v('--bg') };
+    return { grid: v('--border'), axis: v('--faint'), tick: v('--muted'), title: v('--text'), los: v('--los'), path: v('--path'), laser: v('--laser'), accent: v('--accent'), bg: v('--bg'), compare: v('--compare') };
   }
 
   function drawChart() {
     const w = Math.max(280, el.chart.clientWidth), h = Math.max(220, el.chart.clientHeight);
-    const d = chartData();
+    const d = chartData(true);
     const c = chartSVG(d, w, h, screenColors(), true);
     el.chart.innerHTML = c.svg + '<div class="tooltip" hidden></div>';
     const svg = el.chart.querySelector('svg'), tip = el.chart.querySelector('.tooltip'), hover = svg.querySelector('.hover-line');
     const hit = svg.querySelector('.hit');
-    const pathAt = x => {
-      const p = d.pts; let i = 1;
+    const pathAt = (x, p = d.pts) => {
+      let i = 1;
       while (i < p.length - 1 && p[i].x < x) i++;
       const a = p[i - 1], b = p[i], f = b.x === a.x ? 0 : (x - a.x) / (b.x - a.x);
       return a.y + f * (b.y - a.y);
@@ -840,7 +858,8 @@
       tip.hidden = false;
       tip.style.left = (c.X(x) / w * box.width) + 'px';
       tip.style.top = ((e.clientY - box.top)) + 'px';
-      tip.innerHTML = `<b>${x.toFixed(1)} ${d.xUnit}</b><br><span class="t-path">Bullet ${pathAt(x).toFixed(2)} ${d.yUnit}</span><br><span class="t-laser">Laser ${d.laserAt(x).toFixed(2)} ${d.yUnit}</span>`;
+      tip.innerHTML = `<b>${x.toFixed(1)} ${d.xUnit}</b><br><span class="t-path">Bullet ${pathAt(x).toFixed(2)} ${d.yUnit}</span><br><span class="t-laser">Laser ${d.laserAt(x).toFixed(2)} ${d.yUnit}</span>` +
+        (d.ptsB ? `<br><span class="t-cmp">B ${pathAt(x, d.ptsB).toFixed(2)} ${d.yUnit}</span>` : '');
     });
     hit.addEventListener('pointerleave', () => { tip.hidden = true; hover.setAttribute('visibility', 'hidden'); });
   }
@@ -1225,10 +1244,118 @@
     toast(`Zero set to ${state.result.zero} ${metric() ? 'm' : 'yd'}`);
   });
 
+  // ---------- Compare: a second load or zero, as a dashed line on the chart and two table columns ----------
+  // Everything else on the page (targets, range card, clicks, point-blank range, printouts) keeps using the current setup.
+  // Choices: 'z:<zero>' this load at another zero, 's:<name>' a saved setup (exactly as saved), 'l:<name>' one of my loads
+  // with the current sight height and zero.
+
+  // Velocity, B.C., sight height and zero of a saved setup's code, without opening it; null if it's for another firearm type.
+  function setupParams(code) {
+    const m = ('#' + code).match(SHARE_RE);
+    if (!m) return null;
+    const n = s => parseInt(s, 36), flags = n(m[2]), mode = BTS.MODES[flags >> 3], cm = !!(flags & 4);
+    if (mode !== state.mode) return null;
+    const sight = BTS.sightHeights(mode, cm)[n(m[4])], zero = BTS.zeroRanges(mode)[n(m[7])];
+    if (!sight || !zero) return null;
+    let fps, bc;
+    if (m[14]) { fps = n(m[15]); bc = n(m[16]) / 1000; }
+    else {
+      const ci = n(m[3]);
+      if (ci >= BTS.calibers(mode).length) return null;
+      const list = BTS.weights(mode, ci, cm);
+      let w = list[n(m[5])];
+      if (m[1] === '1') { const old = BTS.v1Weights(mode, ci, cm)[n(m[5])]; w = old && list[nearestIndex(list, old.grains, x => x.grains)]; }
+      const s = BTS.shapes(mode, ci)[n(m[6])];
+      if (!w || !s) return null;
+      fps = BTS.typicalVelocityFps(mode, ci, w);
+      bc = BTS.typicalBc(mode, ci, w, s.index);
+    }
+    if (m[11] && mode !== 'shotgun') {
+      const len = n(m[11]) / 10, ref = n(m[12]) / 10 || BARREL_REF_IN[mode];
+      fps = Math.max(100, fps + Math.round((len - ref) * n(m[13])));
+    }
+    if (m[9]) { fps = cm ? n(m[9]) * FPS_PER_MPS : n(m[9]); bc = n(m[10]) / 1000; }
+    return { vFps: fps, bc, sightIn: sight.inches, zeroYd: cm ? zero / BTS.METERS_PER_YARD : zero };
+  }
+
+  // Fills the Compare list for the current firearm, zero and load; drops a choice that no longer applies.
+  function buildCompare() {
+    if (!state.lists.zeros) return false;
+    const before = state.compare, unit = metric() ? 'm' : 'yd', zero = state.lists.zeros[idx(el.zero)], load = currentLoad();
+    const groups = [
+      ['This load at another zero', state.lists.zeros.filter(z => z !== zero).map(z => ['z:' + z, `${z} ${unit} zero`])],
+      ['Saved setups', (readSaved() || []).filter(s => setupParams(s.code)).sort((a, b) => a.name.localeCompare(b.name)).map(s => ['s:' + s.name, s.name])],
+      ['My loads', state.loads.filter(l => l.mode === state.mode && !(load && sameLoad(l, load))).map(l => ['l:' + l.name, l.name])]
+    ];
+    el.compare.innerHTML = '<option value="">Nothing</option>';
+    groups.forEach(([label, items]) => {
+      if (!items.length) return;
+      const g = document.createElement('optgroup');
+      g.label = label;
+      items.forEach(([value, text]) => { const o = document.createElement('option'); o.value = value; o.textContent = text; g.appendChild(o); });
+      el.compare.appendChild(g);
+    });
+    el.compare.value = before;
+    if (el.compare.value !== before) { el.compare.value = ''; state.compare = ''; }
+    return state.compare !== before;
+  }
+
+  // The comparison for result r: its load, sight height and zero, then its solution (or why it has none) and table rows.
+  function compareSpec(r) {
+    const v = state.compare, key = v.slice(2);
+    if (v[0] === 'z') {
+      const z = Number(key);
+      return { label: `${z} ${metric() ? 'm' : 'yd'} zero`, vFps: r.vFps, bc: r.bc, sightIn: r.sightIn, zeroYd: metric() ? z / BTS.METERS_PER_YARD : z };
+    }
+    if (v[0] === 'l') {
+      const l = state.loads.find(x => x.mode === state.mode && x.name === key);
+      return l ? { label: l.name, vFps: Math.max(100, l.fps + barrelAdjustFps()), bc: l.bc, sightIn: r.sightIn, zeroYd: r.zeroYd } : null;
+    }
+    if (v[0] === 's') {
+      const s = (readSaved() || []).find(x => x.name === key), p = s && setupParams(s.code);
+      return p ? Object.assign(p, { label: s.name }) : null;
+    }
+    return null;
+  }
+  function addCompare(r) {
+    const b = state.compare ? compareSpec(r) : null;
+    r.b = b;
+    if (!b) return;
+    const sol = BTS.solve(b.vFps, b.bc, b.sightIn, b.zeroYd);
+    if (sol.rising || !isFinite(sol.meetYd) || sol.meetYd <= 0) { b.error = true; return; }
+    b.angle = sol.angle;
+    const windMph = state.windMph * windFactor(), k = metric() ? BTS.CM_PER_INCH : 1;
+    BTS.trajectoryTable(b.vFps, b.bc, b.sightIn, b.angle, r.table.map(row => row.rangeYd), state.slopeDeg).forEach((p, i) => {
+      const row = r.table[i];
+      row.b = { path: p.y * k, drift: BTS.windDriftIn(windMph, row.rangeYd, p.t, b.vFps) * k };
+    });
+  }
+
+  // Legend entry and the one-line summary under the chart: how B differs at the farthest range in the table.
+  function showCompare() {
+    const r = state.result, b = r && r.b;
+    el.compareKey.hidden = !b || !!b.error;
+    el.compareNote.hidden = !b;
+    if (!b) return;
+    el.compareName.textContent = 'B: ' + b.label;
+    const u = trajectoryUnits();
+    if (b.error) { el.compareNote.textContent = `B (${b.label}) can’t be zeroed this close: the bullet is still rising there.`; return; }
+    const last = r.table[r.table.length - 1], dy = last.b.path - last.path, dd = last.b.drift - last.drift;
+    const amount = v => Math.abs(v).toFixed(1) + ' ' + u.h;
+    const height = Math.abs(dy) < 0.05 ? 'hits at the same height as your setup' : `hits ${amount(dy)} ${dy > 0 ? 'higher' : 'lower'} than your setup`;
+    const drift = !driftSide() ? '' : Math.abs(dd) < 0.05 ? ' and drifts about the same' : ` and drifts ${amount(dd)} ${dd > 0 ? 'more' : 'less'}`;
+    el.compareNote.textContent = `At ${last.range} ${u.d}, B ${height}${drift}${state.slopeDeg ? ' (at your shot angle; the chart shows level ground)' : ''}.`;
+  }
+
+  el.compare.addEventListener('change', () => {
+    state.compare = el.compare.value;
+    if (state.result && !state.result.error) { refreshTable(); drawChart(); }
+  });
+
   // Rebuilds only the trajectory table (wind and table settings don't change the boresight solution).
   function refreshTable() {
     const r = state.result;
-    if (r && !r.error) { r.table = trajectoryRows(r.angle, r.sightIn, r.zero, r.zeroYd); renderTable(); }
+    if (r && !r.error) { r.table = trajectoryRows(r.angle, r.sightIn, r.zero, r.zeroYd); addCompare(r); renderTable(); }
   }
 
   el.barrelOn.addEventListener('change', () => {
@@ -1422,6 +1549,8 @@
     el.savedSave.disabled = el.savedName.disabled = !available;
     el.savedCount.textContent = has ? String(list.length) : '';
     if (!available) el.savedNote.textContent = 'This browser is blocking site storage, so setups can’t be saved here. Copy link still works.';
+    // The Compare list offers saved setups, so it follows them (a deleted one stops being compared).
+    if (buildCompare() && state.result && !state.result.error) { refreshTable(); drawChart(); }
   }
   function suggestedName() {
     return caliberName() + ' · ' + state.lists.weights[idx(el.weight)].label + ' · ' +

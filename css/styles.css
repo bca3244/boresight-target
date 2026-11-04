@@ -14,6 +14,7 @@
   --laser: #ff4d5e;
   --path: #f5b942;
   --los: #5aa2ff;
+  --compare: #c792ff;
   --danger-bg: #2a1418;
   --danger-border: #6b2630;
   --radius: 14px;
@@ -145,8 +146,10 @@ input.custom { border-color: #a07a1d; }
 .chart-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .legend { display: flex; gap: 18px; flex-wrap: wrap; margin: 12px 0 4px; color: var(--muted); font-size: 14.5px; }
 .legend span { display: inline-flex; align-items: center; gap: 7px; }
+.legend span[hidden] { display: none; }
 .sw { width: 18px; height: 3px; border-radius: 2px; display: inline-block; }
 .sw.los { background: var(--los); } .sw.path { background: var(--path); } .sw.laser { background: var(--laser); }
+.sw.cmp { background: repeating-linear-gradient(90deg, var(--compare) 0 6px, transparent 6px 9px); }
 .chart { position: relative; width: 100%; aspect-ratio: 16 / 9; min-height: 220px; }
 .chart svg { display: block; width: 100%; height: 100%; overflow: visible; }
 .chart .grid line { stroke: var(--border); stroke-width: 1; }
@@ -165,6 +168,7 @@ input.custom { border-color: #a07a1d; }
 }
 .tooltip b { color: var(--text); }
 .tooltip .t-path { color: var(--path); } .tooltip .t-laser { color: var(--laser); }
+.tooltip .t-cmp { color: var(--compare); }
 
 /* ---------- How to (collapsible) ---------- */
 .how { padding: 0; }
@@ -250,11 +254,13 @@ table.data td { text-align: right; padding: 8px 10px; border-bottom: 1px solid v
 table.data th:first-child, table.data td:first-child { text-align: left; }
 table.data td.up { color: var(--path); }
 table.data td.down { color: var(--muted); }
+table.data .cmp { color: var(--compare); }
 table.data tr.zero-row td { background: rgba(45, 212, 191, 0.07); }
 table.data .tag { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 6px; background: rgba(45, 212, 191, 0.16); color: var(--accent); font-size: 11.5px; font-weight: 700; }
 #traj-card .chart-head .muted { font-size: 13.5px; }
 .traj-tools { display: flex; align-items: flex-end; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
 .traj-tools .t-field { flex: 0 0 116px; }
+.traj-tools .compare-field { flex-basis: 220px; }
 .traj-tools #print-card { margin-left: auto; }
 .traj-hint { margin: 8px 0 0; }
 .traj-tools .card-click-field { flex-basis: 170px; }

@@ -465,6 +465,72 @@ function set(d, id, value, ev = 'input') { const e = d.getElementById(id); e.val
     w.localStorage.removeItem('bts.loads');
   }
 
+  // Compare with: a second zero, saved setup or load as a dashed line and two table columns.
+  await load('');
+  if (storageOk) {
+    let d = frame.contentDocument, w = frame.contentWindow;
+    const $ = id => d.getElementById(id);
+    const rowAt = range => Array.from($('traj-table').tBodies[0].rows).find(r => parseFloat(r.cells[0].textContent) === range);
+    const num = s => parseFloat(s.replace('−', '-'));
+    const bPath = range => num(rowAt(range).cells[7].textContent);
+    const pick = v => set(d, 'compare', v, 'change');
+    row('Compare starts at Nothing, with no B on the page', 'Nothing, 10 columns, no dashed line', `${sel2(d, 'compare')}, ${rowAt(300).cells.length} columns, ${$('chart').querySelector('.cmp-path') ? 'dashed line' : 'no dashed line'}`,
+        sel2(d, 'compare') === 'Nothing' && rowAt(300).cells.length === 10 && !$('chart').querySelector('.cmp-path') && $('compare-key').hidden && $('compare-note').hidden);
+    const zeroOpts = Array.from($('compare').querySelectorAll('optgroup[label="This load at another zero"] option')).map(o => o.textContent);
+    row('Compare offers the other zeros for this load', '9 zeros, not 100 yd', zeroOpts.length + ' zeros' + (zeroOpts.includes('100 yd zero') ? ', includes 100' : ''), zeroOpts.length === 9 && !zeroOpts.includes('100 yd zero') && zeroOpts.includes('200 yd zero'));
+    const hashBefore = w.location.hash;
+    pick('z:200');
+    row('Comparing with a 200 yd zero adds the B columns', 'B: 200 yd zero, 12 columns', `${$('traj-table').tHead.rows[0].cells[3]?.textContent}, ${rowAt(300).cells.length} columns`,
+        /B: 200 yd zero/.test($('traj-table').tHead.textContent) && rowAt(300).cells.length === 12);
+    row('B with a 200 yd zero is on the sight line at 200 yd and high at 100', '≈0 at 200, high at 100', `${bPath(200)} at 200, ${bPath(100)} at 100`, Math.abs(bPath(200)) < 0.05 && bPath(100) > 1);
+    row('The chart draws B dashed, with a legend entry', 'dashed line, B: 200 yd zero', `${$('chart').querySelector('.cmp-path') ? 'dashed line' : 'none'}, ${$('compare-key').hidden ? 'no key' : $('compare-name').textContent}`,
+        !!$('chart').querySelector('.cmp-path') && !$('compare-key').hidden && $('compare-name').textContent === 'B: 200 yd zero');
+    row('The note sums up the difference at the farthest range', 'At 300 yd, B hits … in higher than your setup and drifts about the same.', $('compare-note').textContent,
+        /^At 300 yd, B hits [\d.]+ in higher than your setup and drifts about the same\.$/.test($('compare-note').textContent) && !$('compare-note').hidden);
+    row('Comparing doesn’t change the link', hashBefore || 'no code', w.location.hash || 'no code', w.location.hash === hashBefore);
+    row('The range card still shows only the current setup', 'no B', /B:/.test($('card-preview').textContent) ? 'B on the card' : 'no B', !/B:/.test($('card-preview').textContent));
+    const b200 = [100, 200, 300].map(bPath);
+    // A saved setup is compared exactly as saved: the same zero gives the same numbers, and so does its own velocity.
+    set(d, 'zero', Array.from($('zero').options).find(o => o.textContent === '200 yd').value, 'change');
+    const code200 = w.BTS_APP.shareCode();
+    set(d, 'velocity', '2500');
+    const slow300 = num(rowAt(300).cells[1].textContent), codeSlow = w.BTS_APP.shareCode();
+    $('reset-load').click();
+    set(d, 'zero', Array.from($('zero').options).find(o => o.textContent === '100 yd').value, 'change');
+    w.localStorage.setItem('bts.saved', JSON.stringify([{ name: 'Zero 200', code: code200 }, { name: 'Slow 2500', code: codeSlow }, { name: 'A pistol', code: '28000b000100' }]));
+    w.localStorage.setItem('bts.loads', JSON.stringify([{ name: 'Hot load', mode: 'rifle', grains: 150, fps: 3000, bc: 0.4 }]));
+    await load('');
+    d = frame.contentDocument; w = frame.contentWindow;
+    const saved = Array.from($('compare').querySelectorAll('optgroup[label="Saved setups"] option')).map(o => o.textContent);
+    row('Loads saved earlier are listed when the page opens', 'Hot load', Array.from($('caliber').querySelectorAll('optgroup[label="My loads"] option')).map(o => o.textContent).join(', ') || 'none',
+        !!Array.from($('caliber').options).find(o => o.textContent === 'Hot load'));
+    row('Saved setups for this firearm are offered', 'Slow 2500, Zero 200', saved.join(', '), saved.join(', ') === 'Slow 2500, Zero 200');
+    pick('s:Zero 200');
+    const s200 = [100, 200, 300].map(bPath);
+    row('A saved setup with a 200 yd zero matches “200 yd zero”', b200.join(' / '), s200.join(' / '), s200.every((v, i) => Math.abs(v - b200[i]) < 0.011));
+    pick('s:Slow 2500');
+    row('A saved setup keeps its own velocity', slow300.toFixed(2) + ' at 300 (2500 fps, 200 yd zero)', bPath(300).toFixed(2), Math.abs(bPath(300) - slow300) < 0.011);
+    row('A slower B drifts more', /drifts [\d.]+ in more/.test($('compare-note').textContent) ? 'drifts more' : $('compare-note').textContent, /drifts [\d.]+ in more/.test($('compare-note').textContent) ? 'drifts more' : $('compare-note').textContent, /drifts [\d.]+ in more/.test($('compare-note').textContent));
+    set(d, 'slope', '20', 'change');
+    row('With a shot angle the note says so', 'at your shot angle', $('compare-note').textContent, /\(at your shot angle; the chart shows level ground\)/.test($('compare-note').textContent));
+    set(d, 'slope', '0', 'change');
+    w.confirm = () => true;
+    $('saved-list').value = 'Slow 2500';
+    $('saved-delete').click();
+    row('Deleting the compared setup stops the comparison', 'Nothing, 10 columns', `${sel2(d, 'compare')}, ${rowAt(300).cells.length} columns`, sel2(d, 'compare') === 'Nothing' && rowAt(300).cells.length === 10 && $('compare-note').hidden);
+    pick('l:Hot load');
+    row('One of my loads can be compared', 'B: Hot load, faster so higher at 300', `${$('compare-name').textContent}, ${bPath(300)} vs ${num(rowAt(300).cells[1].textContent)}`,
+        $('compare-name').textContent === 'B: Hot load' && bPath(300) > num(rowAt(300).cells[1].textContent));
+    const loadOpt = Array.from($('caliber').options).find(o => o.textContent === 'Hot load');
+    set(d, 'caliber', loadOpt.value, 'change');
+    row('Selecting that load itself drops it from Compare', 'Nothing, not offered', `${sel2(d, 'compare')}, ${$('compare').querySelector('option[value="l:Hot load"]') ? 'offered' : 'not offered'}`,
+        sel2(d, 'compare') === 'Nothing' && !$('compare').querySelector('option[value="l:Hot load"]'));
+    pick('z:200');
+    d.querySelector('[data-mode="pistol"]').click();
+    row('Changing firearm stops a comparison that no longer applies', 'Nothing', sel2(d, 'compare'), sel2(d, 'compare') === 'Nothing' && $('compare-key').hidden);
+    w.localStorage.removeItem('bts.saved'); w.localStorage.removeItem('bts.loads');
+  }
+
   // Reset: change settings, keep a saved setup and a load, then reset to the plain page.
   await load('');
   if (storageOk) {

@@ -268,8 +268,10 @@
           <span><i class="sw path"></i>Bullet path</span>
           <span><i class="sw laser"></i>Laser beam</span>
           <span class="rise-note"><i class="sw rise"></i><span id="max-rise">Max rise</span></span>
+          <span id="compare-key" hidden><i class="sw cmp"></i><span id="compare-name">B</span></span>
         </div>
         <div id="chart" class="chart"></div>
+        <p class="hint traj-hint" id="compare-note" hidden></p>
       </div>
 
       <div class="card" id="pbr-card" data-collapse="pbr">
@@ -320,6 +322,10 @@
           <label class="mini t-field">
             <span>Shot angle</span>
             <select id="slope" title="Uphill or downhill angle to the target"></select>
+          </label>
+          <label class="mini t-field compare-field">
+            <span>Compare with</span>
+            <select id="compare" title="Show a second load or zero on the chart and in the table"></select>
           </label>
         </div>
         <p class="hint traj-hint" id="traj-hint">MOA and mil are from the line of sight. 3 and 9 o'clock winds push the bullet the most; 12 and 6 o'clock winds don't push it sideways.</p>
