@@ -204,6 +204,28 @@
         <select id="zero"></select>
         <span class="hint">Where the bullet should hit the center of the target.</span>
       </label>
+
+      <div class="field compare">
+        <div class="load-tools">
+          <button type="button" class="link" id="cmp-open">Compare with another load</button>
+        </div>
+        <div class="load-form" id="cmp-form" hidden>
+          <h3>Compare with (B)</h3>
+          <label class="mini">
+            <span id="cmp-caliber-label">Caliber or load</span>
+            <select id="cmp-caliber"></select>
+          </label>
+          <div class="load-form-row">
+            <label class="mini"><span>Bullet weight</span><select id="cmp-weight"></select></label>
+            <label class="mini"><span>Bullet shape</span><select id="cmp-shape"></select></label>
+            <label class="mini"><span>Zero range</span><select id="cmp-zero"></select></label>
+          </div>
+          <p class="hint">B shows as a dashed line on the chart and two columns in the trajectory table. It uses your sight height and barrel, typical velocities, and your own velocity and B.C. when it’s the same load.</p>
+          <div class="load-form-actions">
+            <button type="button" class="btn small" id="cmp-stop">Stop comparing</button>
+          </div>
+        </div>
+      </div>
     </section>
     </div>
 
@@ -322,10 +344,6 @@
           <label class="mini t-field">
             <span>Shot angle</span>
             <select id="slope" title="Uphill or downhill angle to the target"></select>
-          </label>
-          <label class="mini t-field compare-field">
-            <span>Compare with</span>
-            <select id="compare" title="Show a second load or zero on the chart and in the table"></select>
           </label>
         </div>
         <p class="hint traj-hint" id="traj-hint">MOA and mil are from the line of sight. 3 and 9 o'clock winds push the bullet the most; 12 and 6 o'clock winds don't push it sideways.</p>

@@ -16,7 +16,7 @@
     savedName: $('saved-name'), savedSave: $('saved-save'), savedNote: $('saved-note'), savedCount: $('saved-count'),
     savedExport: $('saved-export'), savedImport: $('saved-import'), savedFile: $('saved-file'),
     trajTable: $('traj-table'), trajNote: $('traj-note'), wind: $('wind'), windUnit: $('wind-unit'),
-    windClock: $('wind-clock'), slope: $('slope'), compare: $('compare'), compareKey: $('compare-key'), compareName: $('compare-name'), compareNote: $('compare-note'), tMax: $('t-max'), tStep: $('t-step'), trajHint: $('traj-hint'), printCard: $('print-card'),
+    windClock: $('wind-clock'), slope: $('slope'), compareKey: $('compare-key'), compareName: $('compare-name'), compareNote: $('compare-note'), tMax: $('t-max'), tStep: $('t-step'), trajHint: $('traj-hint'), printCard: $('print-card'),
     cardClick: $('card-click'), cardHint: $('card-hint'), cardPreview: $('card-preview'),
     pbrZone: $('pbr-zone'), pbrUnit: $('pbr-unit'), pbrUse: $('pbr-use'), pbrHint: $('pbr-hint'),
     cRange: $('c-range'), cClick: $('c-click'), cVert: $('c-vert'), cVdir: $('c-vdir'), cHoriz: $('c-horiz'), cHdir: $('c-hdir'),
@@ -77,7 +77,7 @@
     table: tablePrefs(),    // trajectory table extent per firearm: { max, step } in the displayed distance unit
     loads: [],           // my loads (every firearm type), see normLoad(); read from storage below, once their limits exist
     linkLoad: null,      // a load opened from a link that isn't in my loads
-    compare: '',         // what the chart and table compare with (see buildCompare); '' = nothing. Not kept or shared.
+    compare: false,      // true while comparing with B (see the Compare section). Not kept or shared.
     result: null
   };
   const metric = () => state.units === 'metric';
@@ -594,7 +594,7 @@
   // ---------- Rendering ----------
 
   function render(keepTarget) {
-    buildCompare();
+    syncCompare();
     const r = compute();
     showLoadTools();
     const ok = !r.error;
@@ -1244,78 +1244,93 @@
     toast(`Zero set to ${state.result.zero} ${metric() ? 'm' : 'yd'}`);
   });
 
-  // ---------- Compare: a second load or zero, as a dashed line on the chart and two table columns ----------
+  // ---------- Compare: a second caliber or load (B), as a dashed line on the chart and two table columns ----------
+  // B has its own caliber (or one of my loads), weight, shape and zero, and uses the current sight height and barrel.
   // Everything else on the page (targets, range card, clicks, point-blank range, printouts) keeps using the current setup.
-  // Choices: 'z:<zero>' this load at another zero, 's:<name>' a saved setup (exactly as saved), 'l:<name>' one of my loads
-  // with the current sight height and zero.
+  const cmp = {
+    open: $('cmp-open'), stop: $('cmp-stop'), form: $('cmp-form'),
+    caliber: $('cmp-caliber'), weight: $('cmp-weight'), shape: $('cmp-shape'), zero: $('cmp-zero'),
+    lists: {}
+  };
+  const cmpLoad = () => { const v = idx(cmp.caliber); return v >= LOAD_BASE ? modeLoads()[v - LOAD_BASE] || null : null; };
+  const cmpName = () => { const l = cmpLoad(); return l ? l.name : BTS.calibers(state.mode)[idx(cmp.caliber)]; };
 
-  // Velocity, B.C., sight height and zero of a saved setup's code, without opening it; null if it's for another firearm type.
-  function setupParams(code) {
-    const m = ('#' + code).match(SHARE_RE);
-    if (!m) return null;
-    const n = s => parseInt(s, 36), flags = n(m[2]), mode = BTS.MODES[flags >> 3], cm = !!(flags & 4);
-    if (mode !== state.mode) return null;
-    const sight = BTS.sightHeights(mode, cm)[n(m[4])], zero = BTS.zeroRanges(mode)[n(m[7])];
-    if (!sight || !zero) return null;
-    let fps, bc;
-    if (m[14]) { fps = n(m[15]); bc = n(m[16]) / 1000; }
-    else {
-      const ci = n(m[3]);
-      if (ci >= BTS.calibers(mode).length) return null;
-      const list = BTS.weights(mode, ci, cm);
-      let w = list[n(m[5])];
-      if (m[1] === '1') { const old = BTS.v1Weights(mode, ci, cm)[n(m[5])]; w = old && list[nearestIndex(list, old.grains, x => x.grains)]; }
-      const s = BTS.shapes(mode, ci)[n(m[6])];
-      if (!w || !s) return null;
-      fps = BTS.typicalVelocityFps(mode, ci, w);
-      bc = BTS.typicalBc(mode, ci, w, s.index);
+  // Fills B's lists, keeping B's caliber (by name), weight, shape and zero when they still exist; otherwise the current setup's.
+  function buildCompare(keep) {
+    const names = BTS.calibers(state.mode), loads = modeLoads();
+    let pick = names.indexOf(keep.name);
+    if (pick < 0) { const k = loads.findIndex(l => l.name === keep.name); if (k >= 0) pick = LOAD_BASE + k; }
+    if (pick < 0) pick = idx(el.caliber);
+    $('cmp-caliber-label').textContent = state.mode === 'shotgun' ? 'Gauge or load' : 'Caliber or load';
+    cmp.caliber.innerHTML = '';
+    const add = (parent, value, text) => { const o = document.createElement('option'); o.value = String(value); o.textContent = text; parent.appendChild(o); };
+    const group = label => { const g = document.createElement('optgroup'); g.label = label; cmp.caliber.appendChild(g); return g; };
+    const mine = loads.length ? group('My loads') : null;
+    loads.forEach((l, k) => add(mine, LOAD_BASE + k, l.name + (l === state.linkLoad ? ' (from link)' : '')));
+    const list = loads.length ? group(state.mode === 'shotgun' ? 'Gauges' : 'Calibers') : cmp.caliber;
+    names.forEach((n, i) => add(list, i, n));
+    cmp.caliber.value = String(pick);
+    const load = cmpLoad(), ci = idx(cmp.caliber);
+    if (load) {
+      cmp.lists.weights = [{ label: loadWeightLabel(load.grains), grains: load.grains }];
+      cmp.lists.shapes = [{ label: LOAD_SHAPE, index: -1 }];
+    } else {
+      cmp.lists.weights = BTS.weights(state.mode, ci, metric());
+      cmp.lists.shapes = BTS.shapes(state.mode, ci);
     }
-    if (m[11] && mode !== 'shotgun') {
-      const len = n(m[11]) / 10, ref = n(m[12]) / 10 || BARREL_REF_IN[mode];
-      fps = Math.max(100, fps + Math.round((len - ref) * n(m[13])));
+    let grains = load ? load.grains : keep.grains;
+    if (grains == null) {
+      if (state.mode === 'shotgun') grains = BTS.GAUGES[ci].eighths[0] === 5 ? 437.5 : 0.75 * 437.5;
+      else { const row = BTS_DATA[state.mode][ci]; grains = (row[2] + row[3]) / 2; }
     }
-    if (m[9]) { fps = cm ? n(m[9]) * FPS_PER_MPS : n(m[9]); bc = n(m[10]) / 1000; }
-    return { vFps: fps, bc, sightIn: sight.inches, zeroYd: cm ? zero / BTS.METERS_PER_YARD : zero };
+    fill(cmp.weight, cmp.lists.weights, w => w.label, nearestIndex(cmp.lists.weights, grains, w => w.grains));
+    let s = cmp.lists.shapes.findIndex(x => x.label === keep.shape);
+    if (s < 0) s = cmp.lists.shapes.findIndex(x => x.label === 'Pointed');
+    if (s < 0) s = cmp.lists.shapes.findIndex(x => x.label === 'Sabot Slug');
+    fill(cmp.shape, cmp.lists.shapes, x => x.label, Math.max(0, s));
+    cmp.weight.disabled = cmp.shape.disabled = !!load;
+    cmp.lists.zeros = state.lists.zeros;
+    const z = cmp.lists.zeros.indexOf(keep.zero);
+    fill(cmp.zero, cmp.lists.zeros, v => v + (metric() ? ' m' : ' yd'), z < 0 ? idx(el.zero) : z);
+  }
+  // What B is now, to keep it through a rebuild (or the current setup's values when B is new).
+  function compareKeep(fromSetup) {
+    const s = fromSetup ? el : cmp, lists = fromSetup ? state.lists : cmp.lists;
+    const w = lists.weights[idx(s.weight)], sh = lists.shapes[idx(s.shape)];
+    return { name: fromSetup ? caliberName() : cmpName(), grains: w && w.grains, shape: sh && sh.label, zero: lists.zeros[idx(s.zero)] };
+  }
+  // B's lists depend on the firearm, units and my loads, so they're rebuilt with every render while comparing.
+  function syncCompare() { if (state.compare) buildCompare(compareKeep(false)); }
+  function openCompare() {
+    buildCompare(compareKeep(true));
+    state.compare = true;
+    cmp.form.hidden = false;
+    cmp.open.hidden = true;
+    if (state.result && !state.result.error) { refreshTable(); drawChart(); }
+    cmp.caliber.focus();
+  }
+  function closeCompare() {
+    state.compare = false;
+    cmp.form.hidden = true;
+    cmp.open.hidden = false;
   }
 
-  // Fills the Compare list for the current firearm, zero and load; drops a choice that no longer applies.
-  function buildCompare() {
-    if (!state.lists.zeros) return false;
-    const before = state.compare, unit = metric() ? 'm' : 'yd', zero = state.lists.zeros[idx(el.zero)], load = currentLoad();
-    const groups = [
-      ['This load at another zero', state.lists.zeros.filter(z => z !== zero).map(z => ['z:' + z, `${z} ${unit} zero`])],
-      ['Saved setups', (readSaved() || []).filter(s => setupParams(s.code)).sort((a, b) => a.name.localeCompare(b.name)).map(s => ['s:' + s.name, s.name])],
-      ['My loads', state.loads.filter(l => l.mode === state.mode && !(load && sameLoad(l, load))).map(l => ['l:' + l.name, l.name])]
-    ];
-    el.compare.innerHTML = '<option value="">Nothing</option>';
-    groups.forEach(([label, items]) => {
-      if (!items.length) return;
-      const g = document.createElement('optgroup');
-      g.label = label;
-      items.forEach(([value, text]) => { const o = document.createElement('option'); o.value = value; o.textContent = text; g.appendChild(o); });
-      el.compare.appendChild(g);
-    });
-    el.compare.value = before;
-    if (el.compare.value !== before) { el.compare.value = ''; state.compare = ''; }
-    return state.compare !== before;
-  }
-
-  // The comparison for result r: its load, sight height and zero, then its solution (or why it has none) and table rows.
+  // B for result r: its velocity and B.C. (the current setup's when it's the same caliber, weight and shape),
+  // the current sight height, and its zero.
   function compareSpec(r) {
-    const v = state.compare, key = v.slice(2);
-    if (v[0] === 'z') {
-      const z = Number(key);
-      return { label: `${z} ${metric() ? 'm' : 'yd'} zero`, vFps: r.vFps, bc: r.bc, sightIn: r.sightIn, zeroYd: metric() ? z / BTS.METERS_PER_YARD : z };
-    }
-    if (v[0] === 'l') {
-      const l = state.loads.find(x => x.mode === state.mode && x.name === key);
-      return l ? { label: l.name, vFps: Math.max(100, l.fps + barrelAdjustFps()), bc: l.bc, sightIn: r.sightIn, zeroYd: r.zeroYd } : null;
-    }
-    if (v[0] === 's') {
-      const s = (readSaved() || []).find(x => x.name === key), p = s && setupParams(s.code);
-      return p ? Object.assign(p, { label: s.name }) : null;
-    }
-    return null;
+    const load = cmpLoad(), ci = idx(cmp.caliber), w = cmp.lists.weights[idx(cmp.weight)], s = cmp.lists.shapes[idx(cmp.shape)];
+    const zero = cmp.lists.zeros[idx(cmp.zero)];
+    if (!w || !s || zero == null) return null;
+    const sameLoadAsSetup = cmp.caliber.value === el.caliber.value && w.grains === state.lists.weights[idx(el.weight)].grains &&
+      s.label === state.lists.shapes[idx(el.shape)].label;
+    let vFps, bc;
+    if (sameLoadAsSetup) { vFps = r.vFps; bc = r.bc; }
+    else if (load) { vFps = Math.max(100, load.fps + barrelAdjustFps()); bc = load.bc; }
+    else { vFps = Math.max(100, BTS.typicalVelocityFps(state.mode, ci, w) + barrelAdjustFps()); bc = BTS.typicalBc(state.mode, ci, w, s.index); }
+    const unit = metric() ? 'm' : 'yd';
+    const what = sameLoadAsSetup ? 'This load' : load ? load.name : cmpName().split(' (')[0] + ' ' + w.label;
+    const label = what + (sameLoadAsSetup || zero !== r.zero ? `, ${zero} ${unit} zero` : '');
+    return { label, same: sameLoadAsSetup && zero === r.zero, vFps, bc, sightIn: r.sightIn, zeroYd: metric() ? zero / BTS.METERS_PER_YARD : zero };
   }
   function addCompare(r) {
     const b = state.compare ? compareSpec(r) : null;
@@ -1339,6 +1354,7 @@
     if (!b) return;
     el.compareName.textContent = 'B: ' + b.label;
     const u = trajectoryUnits();
+    if (b.same) { el.compareNote.textContent = 'B is the same as your setup for now: change its caliber, weight, shape or zero under Compare with in Setup.'; return; }
     if (b.error) { el.compareNote.textContent = `B (${b.label}) can’t be zeroed this close: the bullet is still rising there.`; return; }
     const last = r.table[r.table.length - 1], dy = last.b.path - last.path, dd = last.b.drift - last.drift;
     const amount = v => Math.abs(v).toFixed(1) + ' ' + u.h;
@@ -1347,10 +1363,14 @@
     el.compareNote.textContent = `At ${last.range} ${u.d}, B ${height}${drift}${state.slopeDeg ? ' (at your shot angle; the chart shows level ground)' : ''}.`;
   }
 
-  el.compare.addEventListener('change', () => {
-    state.compare = el.compare.value;
+  cmp.open.addEventListener('click', openCompare);
+  cmp.stop.addEventListener('click', () => {
+    closeCompare();
     if (state.result && !state.result.error) { refreshTable(); drawChart(); }
   });
+  const compareChanged = () => { syncCompare(); if (state.result && !state.result.error) { refreshTable(); drawChart(); } };
+  cmp.caliber.addEventListener('change', () => { const k = compareKeep(false); k.grains = null; k.name = cmpName(); buildCompare(k); compareChanged(); });
+  [cmp.weight, cmp.shape, cmp.zero].forEach(s => s.addEventListener('change', compareChanged));
 
   // Rebuilds only the trajectory table (wind and table settings don't change the boresight solution).
   function refreshTable() {
@@ -1549,8 +1569,6 @@
     el.savedSave.disabled = el.savedName.disabled = !available;
     el.savedCount.textContent = has ? String(list.length) : '';
     if (!available) el.savedNote.textContent = 'This browser is blocking site storage, so setups can’t be saved here. Copy link still works.';
-    // The Compare list offers saved setups, so it follows them (a deleted one stops being compared).
-    if (buildCompare() && state.result && !state.result.error) { refreshTable(); drawChart(); }
   }
   function suggestedName() {
     return caliberName() + ' · ' + state.lists.weights[idx(el.weight)].label + ' · ' +

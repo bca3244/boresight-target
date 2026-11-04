@@ -260,7 +260,6 @@ table.data .tag { display: inline-block; margin-left: 6px; padding: 1px 7px; bor
 #traj-card .chart-head .muted { font-size: 13.5px; }
 .traj-tools { display: flex; align-items: flex-end; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
 .traj-tools .t-field { flex: 0 0 116px; }
-.traj-tools .compare-field { flex-basis: 220px; }
 .traj-tools #print-card { margin-left: auto; }
 .traj-hint { margin: 8px 0 0; }
 .traj-tools .card-click-field { flex-basis: 170px; }
