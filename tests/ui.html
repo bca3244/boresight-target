@@ -46,6 +46,12 @@ function set(d, id, value, ev = 'input') { const e = d.getElementById(id); e.val
   // A style that sets display on an element overrides its hidden attribute; every hidden element must really be hidden.
   const leaks = Array.from(d.querySelectorAll('[hidden]')).filter(e => getComputedStyle(e).display !== 'none').map(e => e.id || e.className || e.tagName);
   row('Everything marked hidden is off the screen', 'none showing', leaks.length ? 'showing: ' + leaks.join(', ') : 'none showing', leaks.length === 0);
+  {
+    // Screen readers: every visible control has a name (a label, aria-label, title or button text).
+    const nameOf = e => (e.labels && e.labels.length && e.labels[0].textContent.trim()) || e.getAttribute('aria-label') || e.getAttribute('title') || (e.tagName === 'BUTTON' && e.textContent.trim()) || '';
+    const unnamed = Array.from(d.querySelectorAll('input, select, textarea, button')).filter(e => e.offsetParent !== null && !nameOf(e)).map(e => e.id || e.tagName);
+    row('Every visible control has a name', 'none unnamed', unnamed.length ? unnamed.join(', ') : 'none unnamed', !unnamed.length);
+  }
   try { w.localStorage.removeItem('bts.wind'); } catch (e) { /* storage blocked */ }
 
   // Caliber search.
@@ -629,6 +635,38 @@ function set(d, id, value, ev = 'input') { const e = d.getElementById(id); e.val
       got = q ? q.data : 'did not decode';
     } else if (!window.jsQR) got = 'decoder did not load';
     row(`QR on the ${kind} sheet opens this setup`, base + defaultHash, got, got === base + defaultHash);
+  }
+
+  // The longest kind of link (your own named load, a barrel length and a 300 yd zero) still makes a QR code that decodes, on every sheet.
+  {
+    await load('#21000b000100c1ao21m0cu~Test%20168%20handload');
+    let d = frame.contentDocument, w = frame.contentWindow;
+    d.getElementById('barrel-on').click();
+    set(d, 'barrel-len', '20');
+    const zero = Array.from(d.getElementById('zero').options).find(o => o.textContent === '300 yd');
+    if (zero) set(d, 'zero', zero.value, 'change');
+    const want = base + w.location.hash;
+    for (const kind of ['target', 'report', 'sightin', 'card']) {
+      w.location.hash = '#preview-' + kind;
+      await wait(150);
+      let got = 'no QR';
+      const rect = d.querySelector('#print-root rect.qr');
+      if (rect && window.jsQR) {
+        const x = +rect.getAttribute('x'), y = +rect.getAttribute('y'), s = +rect.getAttribute('width'), px = 600;
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}" viewBox="${x} ${y} ${s} ${s}">${rect.outerHTML}${rect.nextElementSibling.outerHTML}</svg>`;
+        const img = new Image();
+        await new Promise(res => { img.onload = res; img.onerror = res; img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg); });
+        const c = document.createElement('canvas'); c.width = c.height = px;
+        const g = c.getContext('2d'); g.drawImage(img, 0, 0, px, px);
+        const q = jsQR(g.getImageData(0, 0, px, px).data, px, px);
+        got = q ? q.data : 'did not decode';
+      } else if (kind === 'card' && !rect) got = 'no QR on the card';
+      else if (!window.jsQR) got = 'decoder did not load';
+      row(`Long link: QR on the ${kind} sheet opens this setup`, kind === 'card' ? 'no QR on the card, or this link' : want, got,
+          got === want || (kind === 'card' && got === 'no QR on the card'));
+    }
+    row('The long link carries the load, barrel and zero', 'c…, b…, ~name', want.replace(base, ''), /b[0-9a-z]{6}/.test(want) && /c[0-9a-z]{9}~Test/.test(want));
+    w.location.hash = '';
   }
 
   document.getElementById('summary').textContent = `${pass} passed, ${fail} failed`;
