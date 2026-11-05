@@ -44,14 +44,14 @@ function code(w, c) {
 }
 
 const CASES = [
-  { name: '223 Rem 55 Pointed, 1.5 in, 100 yd', mode: 'rifle', caliber: '223 Rem (5.56x45mm)', sight: 1.5, weight: '55 gr', shape: 'Pointed', zero: 100, meet: '44.9' },
+  { name: '223 Rem 55 Pointed, 1.5 in, 100 yd', mode: 'rifle', caliber: '223 Rem (5.56x45mm)', sight: 1.5, weight: '55 gr', shape: 'Pointed', zero: 100, meet: '45.3' },   // typical 55 gr velocity is now 3,240 fps (factory figure),
   { name: '9mm 124 RN, 0.9 in, 50 yd (pistol)', mode: 'pistol', caliber: '9mm Luger (9x19mm)', sight: 0.9, weight: '124 gr', shape: 'Round Nose', zero: 50, meet: '9.9' },
   { name: '12 ga Sabot 1 oz, 0.5 in, 100 yd (shotgun)', mode: 'shotgun', caliber: '12 gauge slug barrel', sight: 0.5, weight: '1.000 oz', shape: 'Sabot Slug', zero: 100, meet: '5.7' },   // 1 oz at 1,560 fps (factory figure; was 1,400)
-  { name: '300 WM 180, target 22 yd', mode: 'rifle', caliber: '300 Winchester Mag', sight: 1.5, weight: '180 gr', shape: 'Pointed', zero: 150, meet: '36.8', targetValue: 22, offset: '0.60 in' },
+  { name: '300 WM 180, target 22 yd', mode: 'rifle', caliber: '300 Winchester Mag', sight: 1.5, weight: '180 gr', shape: 'Pointed', zero: 150, meet: '35.7', targetValue: 22, offset: '0.58 in' },   // typical 180 gr velocity is now 2,960 fps (factory figure),
   { name: 'Own load 3215 fps / 0.239 (223)', mode: 'rifle', caliber: '223 Rem (5.56x45mm)', sight: 1.5, weight: '60 gr', shape: 'Boat-Tail', zero: 100, v: 3215, bc: 0.239, meet: '44.9', custom: true },
   { name: 'Metric, A4, full chart (308)', mode: 'rifle', caliber: '308 Win (7.62x51mm)', sight: 3.8, weight: 'middle', shape: 'Pointed', zero: 100, metric: true, a4: true, full: true },
   { name: '350 Legend 170 gr', mode: 'rifle', caliber: '350 Legend', sight: 1.5, weight: '170 gr', shape: 'Pointed', zero: 100 },
-  { name: 'Old version-1 link (300 WM 180 gr)', mode: 'rifle', caliber: '300 Winchester Mag', sight: 1.5, weight: '180 gr', shape: 'Pointed', zero: 150, meet: '36.8', v1: true },
+  { name: 'Old version-1 link (300 WM 180 gr)', mode: 'rifle', caliber: '300 Winchester Mag', sight: 1.5, weight: '180 gr', shape: 'Pointed', zero: 150, meet: '35.7', v1: true },   // 2,960 fps, as above,
   { name: 'Refused zero still round-trips', mode: 'pistol', caliber: '9mm Luger (9x19mm)', sight: 0.9, weight: '124 gr', shape: 'Round Nose', zero: 25, error: true }
 ];
 

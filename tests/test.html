@@ -57,7 +57,7 @@ function row(name, expected, got, ok) {
   [++n, name, expected, got, ok ? 'PASS' : 'FAIL'].forEach((v, i) => { const td = tr.insertCell(); td.textContent = v; if (i === 4) td.className = ok ? 'pass' : 'fail'; });
 }
 
-const VELOCITY_CORRECTED = ['243 Win (6.16x51mm)', '12 gauge slug barrel', '20 gauge slug barrel'];
+const VELOCITY_CORRECTED = ['223 Rem (5.56x45mm)', '243 Win (6.16x51mm)', '6.5mm Creedmoor', '300 Winchester Mag', '12 gauge slug barrel', '20 gauge slug barrel'];
 CASES.forEach(([mode, cal, wt, shape, sight, zero, vExp, bcExp, meetExp, offsets]) => {
   const ci = BTS.calibers(mode).indexOf(cal);
   const weight = BTS.weights(mode, ci, false).find(w => Math.abs((mode === 'shotgun' ? w.ounces : w.grains) - wt) < 1e-9);
@@ -279,6 +279,30 @@ row('Sight cutoff: 1.5 in starts at 8', 8, BTS.targetRanges(1.5, 44.9)[0], BTS.t
     const okY = Math.abs(t[i].y - y) <= Math.max(0.3, Math.abs(y) * 0.02), okV = v == null || Math.abs(t[i].v - v) <= 15;
     row(`${load} at ${r} yd matches the maker's table`, `${y} in${v ? ', ' + v + ' fps' : ''}`, `${t[i].y.toFixed(1)} in, ${t[i].v.toFixed(0)} fps`, okY && okV);
   });
+});
+
+// Wind drift against Federal's Gold Medal 308 168 gr Sierra MatchKing table (2650 fps, G1 0.462); its 10 mph figures are the mean of the
+// published 5 and 15 mph rows. Downrange velocity against Federal's 175 gr MatchKing table (2600 fps, G1 0.505).
+{
+  const R = [100, 200, 300, 400, 500, 600], drift = [0.8, 3.05, 7.4, 13.6, 22.2, 33.0];
+  const t = BTS.trajectoryTable(2650, 0.462, 1.5, BTS.solve(2650, 0.462, 1.5, 100).angle, R);
+  R.forEach((r, i) => {
+    const d = BTS.windDriftIn(10, r, t[i].t, 2650);
+    row(`Federal 168 gr MatchKing 10 mph drift at ${r} yd`, drift[i] + ' in', d.toFixed(1) + ' in', Math.abs(d - drift[i]) <= Math.max(0.2, drift[i] * 0.03));
+  });
+  const V = [2427, 2262, 2102, 1949, 1803], t2 = BTS.trajectoryTable(2600, 0.505, 1.5, BTS.solve(2600, 0.505, 1.5, 100).angle, R.slice(0, 5));
+  row('Federal 175 gr MatchKing velocity at 100–500 yd', V.join(', '), t2.map(p => p.v.toFixed(0)).join(', '), t2.every((p, i) => Math.abs(p.v - V[i]) <= 10));
+}
+
+// Popular factory loads: typical velocity within 60 fps and boat-tail B.C. within 10%. [caliber, grains, fps, G1 B.C.]
+[['308 Win (7.62x51mm)', 175, 2600, 0.505], ['308 Win (7.62x51mm)', 168, 2650, 0.462], ['6.5mm PRC', 143, 2960, 0.625], ['6.5mm Creedmoor', 143, 2700, 0.625],
+ ['300 PRC', 212, 2860, 0.673], ['338 Lapua Magnum', 250, 2970, 0.648], ['338 Lapua Magnum', 300, 2690, 0.736],
+ ['223 Rem (5.56x45mm)', 77, 2720, 0.372], ['223 Rem (5.56x45mm)', 55, 3240, 0.269], ['270 Winchester', 130, 3060, 0.46], ['30-06 Springfield', 165, 2790, 0.454],
+ ['7mm-08 Remington', 140, 2860, 0.486], ['300 Winchester Mag', 180, 2960, 0.507]
+].forEach(([name, g, fps, bc]) => {
+  const i = BTS.calibers('rifle').indexOf(name), bt = BTS.shapes('rifle', i).find(s => s.label === 'Boat-Tail');
+  const v = BTS.typicalVelocityFps('rifle', i, { grains: g }), b = bt ? BTS.typicalBc('rifle', i, { grains: g }, bt.index) : NaN;
+  row(`${name} ${g} gr: factory ${fps} fps, B.C. ${bc}`, '±60 fps, ±10%', `${v} fps, ${isNaN(b) ? 'no boat-tail' : b.toFixed(3)}`, Math.abs(v - fps) <= 60 && Math.abs(b / bc - 1) <= 0.1);
 });
 
 // Slugs against factory loads: [gauge, ounces, fps]. Slug speeds vary a lot by maker, so within 120 fps.
