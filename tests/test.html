@@ -201,6 +201,22 @@ row('Sight cutoff: 1.5 in starts at 8', 8, BTS.targetRanges(1.5, 44.9)[0], BTS.t
     const v = vel(mode, name, g);
     row(`${name} ${g} gr (${mode}) is near the factory ${want} fps`, `${want} ± 100`, v + ' fps', near(v, want, 100));
   });
+  // Typical B.C.s against common factory bullets: [mode, caliber, grains, shape, low, high].
+  const bcOf = (mode, name, grains, shape) => {
+    const i = BTS.calibers(mode).indexOf(name), s = BTS.shapes(mode, i).find(x => x.label === shape);
+    return s ? BTS.typicalBc(mode, i, { grains }, s.index) : NaN;
+  };
+  [['rifle', '6.5x52mm Carcano', 139, 'Boat-Tail', 0.42, 0.52], ['rifle', '6.5x50mm Japanese', 139, 'Boat-Tail', 0.42, 0.52],
+   ['rifle', '22 Hornet', 35, 'Boat-Tail', 0.11, 0.16], ['rifle', '350 Legend', 150, 'Boat-Tail', 0.22, 0.27],
+   ['pistol', '357 Magnum', 158, 'Ball', 0.13, 0.18], ['pistol', '38 Special', 130, 'Ball', 0.1, 0.16],
+   ['pistol', '40 S&W', 180, 'Truncated Cone', 0.14, 0.19], ['pistol', '45 ACP', 200, 'Semi-Wadcutter', 0.13, 0.17],
+   ['pistol', '460 S&W Magnum', 300, 'Flat Point', 0.16, 0.21], ['pistol', '32 Short Colt', 80, 'Round Nose', 0.08, 0.12]
+  ].forEach(([mode, name, g, shape, lo, hi]) => {
+    const bc = bcOf(mode, name, g, shape);
+    row(`${name} ${g} gr ${shape} B.C.`, `${lo}–${hi}`, isNaN(bc) ? 'shape missing' : bc.toFixed(3), bc >= lo && bc <= hi);
+  });
+  row('350 Legend boat-tail is above its pointed bullet', 'boat-tail higher', `${bcOf('rifle', '350 Legend', 150, 'Boat-Tail').toFixed(3)} vs ${bcOf('rifle', '350 Legend', 150, 'Pointed').toFixed(3)}`,
+      bcOf('rifle', '350 Legend', 150, 'Boat-Tail') > bcOf('rifle', '350 Legend', 150, 'Pointed'));
   const common = BTS_DATA.rifle.filter(r => r[7] != null).concat(BTS_DATA.pistol.filter(r => r[7] != null));
   const outside = common.filter(r => r[7] < r[2] || r[7] > r[3]).map(r => r[0]);
   row('Common weights sit inside the typical range', common.length + ' rows, none outside', outside.length ? outside.join(', ') : common.length + ' rows, none outside', !outside.length && common.length > 20);
