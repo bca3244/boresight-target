@@ -323,6 +323,48 @@ row('Sight cutoff: 1.5 in starts at 8', 8, BTS.targetRanges(1.5, 44.9)[0], BTS.t
   row('30-30 160 gr boat-tail B.C. matches the FTX', '0.330 ± 0.02', bcOf('30-30 Winchester', 160, 'Boat-Tail').toFixed(3), Math.abs(bcOf('30-30 Winchester', 160, 'Boat-Tail') - 0.33) <= 0.02);
 }
 
+// Magnums and older cartridges: typical velocity within 70 fps of factory figures. [caliber, grains, fps]
+[['300 Weatherby Mag', 150, 3540], ['300 Weatherby Mag', 180, 3240], ['30-378 Weatherby Mag', 165, 3500], ['30-378 Weatherby Mag', 200, 3160],
+ ['257 Weatherby Mag', 100, 3602], ['270 Weatherby Mag', 130, 3400], ['7mm Weatherby Mag', 140, 3340], ['7mm Weatherby Mag', 175, 3070],
+ ['7mm Rem Ultra Mag', 140, 3425], ['7mm Rem Ultra Mag', 160, 3200], ['300 Rem Ultra Mag', 150, 3450], ['300 Rem Ultra Mag', 200, 3032],
+ ['7mm Rem SA Ultra Mag', 140, 3175], ['300 Rem SA Ultra Mag', 180, 2960], ['28 Nosler', 160, 3300], ['33 Nosler', 225, 3025], ['33 Nosler', 265, 2775],
+ ['22 Nosler', 55, 3350], ['25 Win Super Short Mag', 120, 2990], ['243 Win Super Short Mag', 100, 3110], ['223 Win Super Short Mag', 55, 3850],
+ ['300 Savage', 150, 2630], ['300 Savage', 180, 2350], ['303 British', 180, 2460], ['6mm Remington', 80, 3470], ['6mm Remington', 100, 3100],
+ ['7x57mm Mauser', 140, 2660], ['375 H&H Magnum', 270, 2690], ['35 Remington', 200, 2080], ['30 Remington AR', 123, 2800], ['22 Long', 29, 1215]
+].forEach(([name, g, fps]) => {
+  const v = BTS.typicalVelocityFps('rifle', BTS.calibers('rifle').indexOf(name), { grains: g });
+  row(`${name} ${g} gr is near the factory ${fps} fps`, `${fps} ± 70`, v + ' fps', Math.abs(v - fps) <= 70);
+});
+
+// Metric: Norma's 7x64 tables (m/s at 0, 100, 200, 300 m). With a G1 B.C. fitted to the 100 m figure, the engine's 200 and 300 m
+// velocities match within 3 m/s; for the Bondstrike the fitted B.C. is its published 0.615.
+[['Norma 7x64 Plastic Point 170 gr', [840, 761, 687, 617]], ['Norma 7x64 Bondstrike 165 gr', [870, 820, 773, 727]]].forEach(([load, v]) => {
+  const F = 1 / 0.3048, R = [100, 200, 300].map(m => m / BTS.METERS_PER_YARD), v0 = v[0] * F;
+  const at = bc => BTS.trajectoryTable(v0, bc, 1.6, BTS.solve(v0, bc, 1.6, R[0]).angle, R).map(p => p.v / F);
+  let lo = 0.1, hi = 1.2;
+  for (let i = 0; i < 60; i++) { const mid = (lo + hi) / 2; if (at(mid)[0] < v[1]) lo = mid; else hi = mid; }
+  const p = at(lo);
+  row(`${load}: 200 and 300 m velocity from the 100 m fit`, `${v[2]}, ${v[3]} m/s ± 3`, `${p[1].toFixed(0)}, ${p[2].toFixed(0)} m/s (G1 ${lo.toFixed(3)})`,
+      Math.abs(p[1] - v[2]) <= 3 && Math.abs(p[2] - v[3]) <= 3);
+});
+
+// Point-blank range against Chuck Hawks' published figures (6 in zone, 1.5 in sight), and energy against Federal's 175 gr Gold Medal.
+{
+  const pb270 = BTS.pointBlank(3060, 0.436, 1.5, 3).endYd, pb308 = BTS.pointBlank(2820, 0.409, 1.5, 3).endYd;
+  row('270 Win 130 gr point-blank range (Hawks 294–305 yd)', '294–305 yd', pb270.toFixed(0) + ' yd', pb270 >= 290 && pb270 <= 310);
+  row('308 Win 150 gr point-blank range (Hawks 262–278 yd)', '262–278 yd', pb308.toFixed(0) + ' yd', pb308 >= 258 && pb308 <= 282);
+  const e = BTS.energyFtLb(175, 2600);
+  row('Energy of 175 gr at 2600 fps (Federal 2,627 ft-lb)', '2627 ± 3', e.toFixed(0), Math.abs(e - 2627) <= 3);
+}
+
+// Bullet diameters that were wrong: .32 S&W family and 32 H&R use .312, 38-40 uses .400, 9mm Makarov .363.
+{
+  const dia = (mode, n) => BTS_DATA[mode][BTS.calibers(mode).indexOf(n)][1];
+  const got = [['pistol', '32 H&R Magnum', 0.312], ['pistol', '32 S&W Long', 0.312], ['pistol', '32 S&W', 0.312], ['rifle', '38-40 Winchester', 0.4], ['pistol', '9mm Makarov (9x18mm)', 0.363]]
+    .map(([m, n, d]) => ({ n, d, got: dia(m, n) }));
+  row('Corrected bullet diameters', got.map(x => x.n + ' ' + x.d).join(', '), got.map(x => x.n + ' ' + x.got).join(', '), got.every(x => x.got === x.d));
+}
+
 // Slugs against factory loads: [gauge, ounces, fps]. Slug speeds vary a lot by maker, so within 120 fps.
 [['12 gauge slug barrel', 1.0, 1560], ['12 gauge slug barrel', 0.625, 1900], ['20 gauge slug barrel', 0.5, 1800], ['20 gauge slug barrel', 0.625, 1700]]
   .forEach(([g, oz, fps]) => {

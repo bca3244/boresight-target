@@ -67,6 +67,13 @@ function set(d, id, value, ev = 'input') { const e = d.getElementById(id); e.val
     set(d, 'caliber-search', '7mm prc');
     row('A caliber added later works like the others', '7mm PRC · 175 gr · 2981 fps', `${sel('caliber')} · ${sel('weight')} · ${d.getElementById('velocity').value} fps`,
         sel('caliber') === '7mm PRC' && sel('weight') === '175 gr' && d.getElementById('velocity').value === '2981');
+    // 300 Blackout: supersonic weights get the usual note, subsonic weights a note to enter your own velocity.
+    set(d, 'caliber-search', '300 black');
+    const note = () => d.getElementById('load-note').textContent, wOpt = g => Array.from(d.getElementById('weight').options).find(o => o.textContent === g + ' gr').value;
+    const superNote = note();
+    set(d, 'weight', wOpt(220), 'change');
+    row('A subsonic weight says to enter your own velocity', '220 gr: subsonic note; 125 gr: usual note', `${/subsonic/.test(note()) ? 'subsonic note' : 'usual note'}; ${/subsonic/.test(superNote) ? 'subsonic note' : 'usual note'}`,
+        /subsonic loads at this weight/.test(note()) && !/subsonic/.test(superNote));
     set(d, 'caliber-search', '6.5 creed');
     set(d, 'caliber-search', '');
   }

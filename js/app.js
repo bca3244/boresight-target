@@ -322,6 +322,13 @@
     if (rate >= 0) state.barrel.rate = cm ? rate / MPS_PER_CM_PER_FPS_PER_IN : rate;
   }
 
+  // Calibers loaded both supersonic and subsonic: typical velocities follow the supersonic loads, and from this weight (grains) up
+  // most factory loads are subsonic instead.
+  const SUBSONIC_FROM_GR = { '300 Blackout': 190, '300 Whisper': 190, '350 Legend': 250, '458 SOCOM': 400 };
+  function subsonicWeight() {
+    const w = state.lists.weights[idx(el.weight)], from = !currentLoad() && SUBSONIC_FROM_GR[caliberName()];
+    return !!(from && w && w.grains >= from);
+  }
   function showLoad() {
     el.velocityUnit.textContent = metric() ? 'm/s' : 'fps';
     el.velocity.value = String(metric() ? BTS.roundHalfEven(state.vFps / FPS_PER_MPS) : state.vFps);
@@ -333,6 +340,7 @@
     el.resetLoad.textContent = load ? 'Use this load’s values' : 'Use typical values';
     el.loadNote.textContent = state.custom ? 'Using your values.'
       : load ? `Values from your load “${load.name}”${barrelAdjustFps() ? ', adjusted for your barrel' : ''}.`
+      : subsonicWeight() ? `Typical velocity follows supersonic loads; subsonic loads at this weight run about ${metric() ? '300–320 m/s' : '1,000–1,050 fps'}, so enter yours.`
       : barrelAdjustFps() ? 'Typical values for this load, adjusted for your barrel; enter your own if you know them.'
       : 'Typical values for this load; enter your own if you know them.';
     if (state.barrel) showBarrelNote();
