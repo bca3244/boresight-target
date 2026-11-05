@@ -57,7 +57,8 @@ function row(name, expected, got, ok) {
   [++n, name, expected, got, ok ? 'PASS' : 'FAIL'].forEach((v, i) => { const td = tr.insertCell(); td.textContent = v; if (i === 4) td.className = ok ? 'pass' : 'fail'; });
 }
 
-const VELOCITY_CORRECTED = ['223 Rem (5.56x45mm)', '243 Win (6.16x51mm)', '6.5mm Creedmoor', '300 Winchester Mag', '12 gauge slug barrel', '20 gauge slug barrel'];
+const VELOCITY_CORRECTED = ['17 HMR', '30-30 Winchester', '223 Rem (5.56x45mm)', '243 Win (6.16x51mm)', '6.5mm Creedmoor', '300 Winchester Mag', '12 gauge slug barrel', '20 gauge slug barrel'];
+const BC_CORRECTED = ['17 HMR'];
 CASES.forEach(([mode, cal, wt, shape, sight, zero, vExp, bcExp, meetExp, offsets]) => {
   const ci = BTS.calibers(mode).indexOf(cal);
   const weight = BTS.weights(mode, ci, false).find(w => Math.abs((mode === 'shotgun' ? w.ounces : w.grains) - wt) < 1e-9);
@@ -68,8 +69,8 @@ CASES.forEach(([mode, cal, wt, shape, sight, zero, vExp, bcExp, meetExp, offsets
   const bc = BTS.typicalBc(mode, ci, weight, shapeObj.index);
   // These typical velocities were later corrected to factory figures (checked below), so only the engine part still applies.
   if (!VELOCITY_CORRECTED.includes(cal)) row(tag + ' velocity', vExp, v, v === vExp);
-  row(tag + ' B.C.', bcExp.toFixed(3), bc.toFixed(3), bc.toFixed(3) === bcExp.toFixed(3));
-  const sol = BTS.solve(vExp, bc, sight, zero);
+  if (!BC_CORRECTED.includes(cal)) row(tag + ' B.C.', bcExp.toFixed(3), bc.toFixed(3), bc.toFixed(3) === bcExp.toFixed(3));
+  const sol = BTS.solve(vExp, bcExp, sight, zero);
   if (meetExp === 'error') { row(tag + ' zero refused', 'error', sol.rising ? 'error' : sol.meetYd.toFixed(2), sol.rising); return; }
   row(tag + ' meet', meetExp.toFixed(1), sol.meetYd.toFixed(2) + (sol.rising ? ' (refused)' : ''), !sol.rising && sol.meetYd.toFixed(1) === meetExp.toFixed(1));
   for (const r in offsets || {}) {
@@ -304,6 +305,23 @@ row('Sight cutoff: 1.5 in starts at 8', 8, BTS.targetRanges(1.5, 44.9)[0], BTS.t
   const v = BTS.typicalVelocityFps('rifle', i, { grains: g }), b = bt ? BTS.typicalBc('rifle', i, { grains: g }, bt.index) : NaN;
   row(`${name} ${g} gr: factory ${fps} fps, B.C. ${bc}`, '±60 fps, ±10%', `${v} fps, ${isNaN(b) ? 'no boat-tail' : b.toFixed(3)}`, Math.abs(v - fps) <= 60 && Math.abs(b / bc - 1) <= 0.1);
 });
+
+// Second tier of factory loads: typical velocity within 70 fps. [caliber, grains, fps]
+[['25-06 Remington', 100, 3230], ['25-06 Remington', 117, 3030], ['25-06 Remington', 120, 2990], ['280 Remington', 140, 3000], ['280 Remington', 150, 2900],
+ ['7mm Win Short Mag', 140, 3225], ['7mm Win Short Mag', 160, 3050], ['300 Win Short Mag', 150, 3300], ['300 Win Short Mag', 180, 2970],
+ ['6mm Creedmoor', 108, 2960], ['6.5mm Grendel', 123, 2580], ['22-250 Remington', 55, 3680], ['204 Ruger', 32, 4225], ['204 Ruger', 40, 3900],
+ ['17 HMR', 17, 2550], ['17 HMR', 20, 2375], ['22 Winchester Mag', 30, 2200], ['22 Winchester Mag', 40, 1900], ['22 Hornet', 35, 3100], ['22 Hornet', 45, 2690],
+ ['7.62x39mm Soviet', 123, 2350], ['300 Blackout', 125, 2200], ['375 H&H Magnum', 300, 2530], ['444 Marlin', 265, 2325], ['450 Bushmaster', 250, 2200],
+ ['30-30 Winchester', 150, 2390], ['30-30 Winchester', 170, 2200]
+].forEach(([name, g, fps]) => {
+  const v = BTS.typicalVelocityFps('rifle', BTS.calibers('rifle').indexOf(name), { grains: g });
+  row(`${name} ${g} gr is near the factory ${fps} fps`, `${fps} ± 70`, v + ' fps', Math.abs(v - fps) <= 70);
+});
+{
+  const bcOf = (name, grains, shape) => { const i = BTS.calibers('rifle').indexOf(name), s = BTS.shapes('rifle', i).find(x => x.label === shape); return s ? BTS.typicalBc('rifle', i, { grains }, s.index) : NaN; };
+  row('17 HMR 17 gr pointed B.C. matches the V-MAX', '0.125 ± 0.01', bcOf('17 HMR', 17, 'Pointed').toFixed(3), Math.abs(bcOf('17 HMR', 17, 'Pointed') - 0.125) <= 0.01);
+  row('30-30 160 gr boat-tail B.C. matches the FTX', '0.330 ± 0.02', bcOf('30-30 Winchester', 160, 'Boat-Tail').toFixed(3), Math.abs(bcOf('30-30 Winchester', 160, 'Boat-Tail') - 0.33) <= 0.02);
+}
 
 // Slugs against factory loads: [gauge, ounces, fps]. Slug speeds vary a lot by maker, so within 120 fps.
 [['12 gauge slug barrel', 1.0, 1560], ['12 gauge slug barrel', 0.625, 1900], ['20 gauge slug barrel', 0.5, 1800], ['20 gauge slug barrel', 0.625, 1700]]
