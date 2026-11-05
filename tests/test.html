@@ -57,6 +57,7 @@ function row(name, expected, got, ok) {
   [++n, name, expected, got, ok ? 'PASS' : 'FAIL'].forEach((v, i) => { const td = tr.insertCell(); td.textContent = v; if (i === 4) td.className = ok ? 'pass' : 'fail'; });
 }
 
+const VELOCITY_CORRECTED = ['243 Win (6.16x51mm)', '12 gauge slug barrel', '20 gauge slug barrel'];
 CASES.forEach(([mode, cal, wt, shape, sight, zero, vExp, bcExp, meetExp, offsets]) => {
   const ci = BTS.calibers(mode).indexOf(cal);
   const weight = BTS.weights(mode, ci, false).find(w => Math.abs((mode === 'shotgun' ? w.ounces : w.grains) - wt) < 1e-9);
@@ -65,9 +66,10 @@ CASES.forEach(([mode, cal, wt, shape, sight, zero, vExp, bcExp, meetExp, offsets
   if (ci < 0 || !weight || !shapeObj) { row(tag, 'caliber/weight/shape in lists', 'missing', false); return; }
   const v = BTS.typicalVelocityFps(mode, ci, weight);
   const bc = BTS.typicalBc(mode, ci, weight, shapeObj.index);
-  row(tag + ' velocity', vExp, v, v === vExp);
+  // These typical velocities were later corrected to factory figures (checked below), so only the engine part still applies.
+  if (!VELOCITY_CORRECTED.includes(cal)) row(tag + ' velocity', vExp, v, v === vExp);
   row(tag + ' B.C.', bcExp.toFixed(3), bc.toFixed(3), bc.toFixed(3) === bcExp.toFixed(3));
-  const sol = BTS.solve(v, bc, sight, zero);
+  const sol = BTS.solve(vExp, bc, sight, zero);
   if (meetExp === 'error') { row(tag + ' zero refused', 'error', sol.rising ? 'error' : sol.meetYd.toFixed(2), sol.rising); return; }
   row(tag + ' meet', meetExp.toFixed(1), sol.meetYd.toFixed(2) + (sol.rising ? ' (refused)' : ''), !sol.rising && sol.meetYd.toFixed(1) === meetExp.toFixed(1));
   for (const r in offsets || {}) {
@@ -224,6 +226,13 @@ row('Sight cutoff: 1.5 in starts at 8', 8, BTS.targetRanges(1.5, 44.9)[0], BTS.t
    ['rifle', '400 Legend', 215, 'Pointed', 2250, 0.206], ['rifle', '360 Buckhammer', 180, 'Flat Point', 2400, 0.178], ['rifle', '360 Buckhammer', 200, 'Flat Point', 2200, 0.181],
    ['rifle', '458 SOCOM', 300, 'Flat Point', 1850, null], ['rifle', '277 SIG Fury (6.8x51mm)', 150, 'Boat-Tail', 2950, null],
    ['rifle', '224 Valkyrie', 60, 'Boat-Tail', 3300, null], ['rifle', '224 Valkyrie', 90, 'Boat-Tail', 2700, null], ['rifle', '30 Nosler', 180, 'Boat-Tail', 3200, null],
+   ['rifle', '243 Win (6.16x51mm)', 100, 'Pointed', 2960, null], ['rifle', '257 Roberts', 117, 'Pointed', 2780, null],
+   ['rifle', '35 Whelen', 200, 'Pointed', 2675, null], ['rifle', '35 Whelen', 250, 'Pointed', 2400, null],
+   ['rifle', '7mm Remington Mag', 150, 'Pointed', 3110, null], ['rifle', '7mm Remington Mag', 175, 'Pointed', 2860, null],
+   ['rifle', '7.65x53mm Argentine', 174, 'Round Nose', 2600, null], ['rifle', '7.7x58mm Japanese', 174, 'Round Nose', 2380, null],
+   ['pistol', '357 Magnum', 125, 'Flat Point', 1450, null], ['pistol', '357 Magnum', 158, 'Flat Point', 1240, null],
+   ['pistol', '45 ACP', 185, 'Flat Point', 1000, null], ['pistol', '45 ACP', 230, 'Flat Point', 850, null],
+   ['pistol', '40 S&W', 165, 'Flat Point', 1130, null], ['pistol', '40 S&W', 180, 'Flat Point', 1000, null],
    ['pistol', '30 Super Carry', 100, 'Flat Point', 1250, null], ['pistol', '30 Super Carry', 115, 'Flat Point', 1150, null]
   ].forEach(([mode, name, g, shape, fps, bc]) => {
     const v = vel(mode, name, g), b = bcOf(mode, name, g, shape);
@@ -259,6 +268,26 @@ row('Sight cutoff: 1.5 in starts at 8', 8, BTS.targetRanges(1.5, 44.9)[0], BTS.t
   const outside = common.filter(r => r[7] < r[2] || r[7] > r[3]).map(r => r[0]);
   row('Common weights sit inside the typical range', common.length + ' rows, none outside', outside.length ? outside.join(', ') : common.length + ' rows, none outside', !outside.length && common.length > 20);
 }
+
+// The engine against published factory drop tables (1.5 in sight, 200 yd zero): Hornady 308 Win 168 gr ELD Match
+// (2700 fps, G1 0.523) and Federal American Eagle 223 Rem 55 gr FMJ-BT (3240 fps, G1 0.269). [range, path in, fps or null].
+[['Hornady 308 Win 168 gr ELD Match', 2700, 0.523, [[100, 2.0, 2530], [300, -8.2, 2210], [400, -23.5, 2058], [500, -47.0, 1913]]],
+ ['Federal 223 Rem 55 gr FMJ-BT', 3240, 0.269, [[100, 1.4, 2874], [300, -6.8, 2222], [400, -20.6, null], [500, -44.2, null]]]
+].forEach(([load, v0, bc, pub]) => {
+  const t = BTS.trajectoryTable(v0, bc, 1.5, BTS.solve(v0, bc, 1.5, 200).angle, pub.map(p => p[0]));
+  pub.forEach(([r, y, v], i) => {
+    const okY = Math.abs(t[i].y - y) <= Math.max(0.3, Math.abs(y) * 0.02), okV = v == null || Math.abs(t[i].v - v) <= 15;
+    row(`${load} at ${r} yd matches the maker's table`, `${y} in${v ? ', ' + v + ' fps' : ''}`, `${t[i].y.toFixed(1)} in, ${t[i].v.toFixed(0)} fps`, okY && okV);
+  });
+});
+
+// Slugs against factory loads: [gauge, ounces, fps]. Slug speeds vary a lot by maker, so within 120 fps.
+[['12 gauge slug barrel', 1.0, 1560], ['12 gauge slug barrel', 0.625, 1900], ['20 gauge slug barrel', 0.5, 1800], ['20 gauge slug barrel', 0.625, 1700]]
+  .forEach(([g, oz, fps]) => {
+    const i = BTS.calibers('shotgun').indexOf(g), w = BTS.weights('shotgun', i, false).find(x => Math.abs(x.ounces - oz) < 1e-9);
+    const v = BTS.typicalVelocityFps('shotgun', i, w);
+    row(`${g} ${oz} oz slug is near the factory ${fps} fps`, `${fps} ± 120`, v + ' fps', Math.abs(v - fps) <= 120);
+  });
 
 document.getElementById('summary').textContent = `${pass} passed, ${fail} failed`;
 document.title = `TESTS ${pass} passed ${fail} failed`;

@@ -201,9 +201,11 @@
   // ---- Dropdown rules ----
 
   const MODES = ['rifle', 'pistol', 'shotgun'];
+  // Slug velocity (fps) = fpsA - fpsB x ounces, fitted to factory loads: 12 gauge 1 oz about 1,560 fps and 5/8 oz sabots about 1,900;
+  // 20 gauge 1/2 oz about 1,800 and 5/8 oz sabots about 1,700.
   const GAUGES = [
-    { name: '12 gauge slug barrel', eighths: [5, 12], diameter: 0.729, fps: 1400, ff: { sabot: 1.54, full: 0.9 } },
-    { name: '20 gauge slug barrel', eighths: [4, 10], diameter: 0.617, fps: 1050, ff: { sabot: 1.54, full: 0.8 } }
+    { name: '12 gauge slug barrel', eighths: [5, 12], diameter: 0.729, fpsA: 2360, fpsB: 800, ff: { sabot: 1.54, full: 0.9 } },
+    { name: '20 gauge slug barrel', eighths: [4, 10], diameter: 0.617, fpsA: 2200, fpsB: 800, ff: { sabot: 1.54, full: 0.8 } }
   ];
   const SLUGS = [{ key: 'sabot', name: 'Sabot Slug' }, { key: 'full', name: 'Slug (full bore size)' }];
 
@@ -289,7 +291,7 @@
   }
 
   function typicalVelocityFps(mode, calIndex, weight) {
-    if (mode === 'shotgun') return roundHalfEven(GAUGES[calIndex].fps / weight.ounces);
+    if (mode === 'shotgun') return roundHalfEven(GAUGES[calIndex].fpsA - GAUGES[calIndex].fpsB * weight.ounces);
     const row = window.BTS_DATA[mode][calIndex];
     return roundHalfEven(row[4] - row[5] * weight.grains);
   }
