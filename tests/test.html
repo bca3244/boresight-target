@@ -183,6 +183,29 @@ row('Sight cutoff: 1.5 in starts at 8', 8, BTS.targetRanges(1.5, 44.9)[0], BTS.t
   row('Uphill bullets arrive slower', 'lower velocity', `up ${up[2].v.toFixed(0)}, down ${down[2].v.toFixed(0)} fps`, up[2].v < flat[2].v && down[2].v > flat[2].v);
 }
 
+// Caliber data checks: names, rifle at least as fast as pistol, and loads checked against factory figures.
+{
+  const vel = (mode, name, grains) => BTS.typicalVelocityFps(mode, BTS.calibers(mode).indexOf(name), { grains });
+  const names = ['284 Winchester', '357 Magnum', '450/400 Nitro Express 3"', '450 Nitro Express 3¼"', '500/416 Nitro Express', '6XC'];
+  const missing = names.filter(n => !BTS.calibers('rifle').includes(n));
+  row('Corrected caliber names', 'all listed', missing.length ? 'missing: ' + missing.join(', ') : 'all listed', !missing.length);
+  const slower = BTS.calibers('pistol').filter(n => BTS.calibers('rifle').includes(n)).filter(n => {
+    const r = BTS_DATA.pistol[BTS.calibers('pistol').indexOf(n)], g = r[7] || (r[2] + r[3]) / 2;
+    return vel('rifle', n, g) < vel('pistol', n, g);
+  });
+  row('A rifle is never slower than a pistol with the same load', 'none slower', slower.length ? slower.join(', ') : 'none slower', !slower.length);
+  const near = (got, want, tol) => Math.abs(got - want) <= tol;
+  const checks = [['pistol', '5.7x28mm', 40, 1738], ['rifle', '350 Legend', 145, 2350], ['rifle', '350 Legend', 180, 2100],
+    ['rifle', '454 Casull', 300, 1846], ['rifle', '300 Blackout', 110, 2350], ['rifle', '30 Nosler', 210, 3000]];
+  checks.forEach(([mode, name, g, want]) => {
+    const v = vel(mode, name, g);
+    row(`${name} ${g} gr (${mode}) is near the factory ${want} fps`, `${want} ± 100`, v + ' fps', near(v, want, 100));
+  });
+  const common = BTS_DATA.rifle.filter(r => r[7] != null).concat(BTS_DATA.pistol.filter(r => r[7] != null));
+  const outside = common.filter(r => r[7] < r[2] || r[7] > r[3]).map(r => r[0]);
+  row('Common weights sit inside the typical range', common.length + ' rows, none outside', outside.length ? outside.join(', ') : common.length + ' rows, none outside', !outside.length && common.length > 20);
+}
+
 document.getElementById('summary').textContent = `${pass} passed, ${fail} failed`;
 document.title = `TESTS ${pass} passed ${fail} failed`;
 </script>

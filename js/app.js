@@ -197,6 +197,23 @@
     fill(el.sight, sights, s => s.label, nearestIndex(sights, target, s => s.inches));
   }
 
+  // The weight a new choice of caliber starts on: the row's common weight, or the middle of its typical range
+  // (a 5/8 oz slug in 12 gauge, 3/4 oz otherwise).
+  function startGrains(ci) {
+    if (state.mode === 'shotgun') return BTS.GAUGES[ci].eighths[0] === 5 ? 437.5 : 0.75 * 437.5;
+    const row = BTS_DATA[state.mode][ci];
+    return row[7] || (row[2] + row[3]) / 2;
+  }
+  // The shape it starts on: the one kept from before if it's offered, else the first of these, else the first in the list.
+  const START_SHAPES = ['Pointed', 'Sabot Slug', 'Flat Point', 'Round Nose'];
+  function startShape(shapes, keepLabel) {
+    for (const label of [keepLabel].concat(START_SHAPES)) {
+      const i = shapes.findIndex(s => s.label === label);
+      if (i >= 0) return i;
+    }
+    return 0;
+  }
+
   function buildWeights(keepGrains) {
     const load = currentLoad();
     if (load) {
@@ -209,10 +226,7 @@
     const weights = BTS.weights(state.mode, ci, metric());
     state.lists.weights = weights;
     let target = keepGrains;
-    if (target == null) {
-      if (state.mode === 'shotgun') target = BTS.GAUGES[ci].eighths[0] === 5 ? 437.5 : 0.75 * 437.5;
-      else { const row = BTS_DATA[state.mode][ci]; target = (row[2] + row[3]) / 2; }
-    }
+    if (target == null) target = startGrains(ci);
     fill(el.weight, weights, w => w.label, nearestIndex(weights, target, w => w.grains));
   }
 
@@ -225,10 +239,7 @@
     }
     const shapes = BTS.shapes(state.mode, idx(el.caliber));
     state.lists.shapes = shapes;
-    let pick = shapes.findIndex(s => s.label === keepLabel);
-    if (pick < 0) pick = shapes.findIndex(s => s.label === 'Pointed');
-    if (pick < 0) pick = shapes.findIndex(s => s.label === 'Sabot Slug');
-    fill(el.shape, shapes, s => s.label, Math.max(0, pick));
+    fill(el.shape, shapes, s => s.label, startShape(shapes, keepLabel));
   }
 
   function buildZeros(keep) {
@@ -1280,15 +1291,9 @@
       cmp.lists.shapes = BTS.shapes(state.mode, ci);
     }
     let grains = load ? load.grains : keep.grains;
-    if (grains == null) {
-      if (state.mode === 'shotgun') grains = BTS.GAUGES[ci].eighths[0] === 5 ? 437.5 : 0.75 * 437.5;
-      else { const row = BTS_DATA[state.mode][ci]; grains = (row[2] + row[3]) / 2; }
-    }
+    if (grains == null) grains = startGrains(ci);
     fill(cmp.weight, cmp.lists.weights, w => w.label, nearestIndex(cmp.lists.weights, grains, w => w.grains));
-    let s = cmp.lists.shapes.findIndex(x => x.label === keep.shape);
-    if (s < 0) s = cmp.lists.shapes.findIndex(x => x.label === 'Pointed');
-    if (s < 0) s = cmp.lists.shapes.findIndex(x => x.label === 'Sabot Slug');
-    fill(cmp.shape, cmp.lists.shapes, x => x.label, Math.max(0, s));
+    fill(cmp.shape, cmp.lists.shapes, x => x.label, startShape(cmp.lists.shapes, keep.shape));
     cmp.weight.disabled = cmp.shape.disabled = !!load;
     cmp.lists.zeros = state.lists.zeros;
     const z = cmp.lists.zeros.indexOf(keep.zero);

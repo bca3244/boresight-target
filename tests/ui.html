@@ -92,6 +92,7 @@ function set(d, id, value, ev = 'input') { const e = d.getElementById(id); e.val
     row('Count badge shows 1', '1', d.getElementById('saved-count').textContent, d.getElementById('saved-count').textContent === '1');
     d.querySelector('[data-mode="pistol"]').click();
     row('Switched away to pistol', '9mm Luger (9x19mm)', sel('caliber'), sel('caliber') === '9mm Luger (9x19mm)');
+    row('A pistol caliber starts on its common weight and a flat point', '115 gr · Flat Point', sel('weight') + ' · ' + sel('shape'), sel('weight') === '115 gr' && sel('shape') === 'Flat Point');
     d.getElementById('saved-load').click();
     row('Opening the saved setup restores it', codeBefore + ' · ' + calBefore, w.location.hash + ' · ' + sel('caliber'), w.location.hash === codeBefore && sel('caliber') === calBefore);
     w.confirm = () => true;
