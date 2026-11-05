@@ -485,6 +485,22 @@ function set(d, id, value, ev = 'input') { const e = d.getElementById(id); e.val
         shown('cmp-form') && !shown('cmp-open') && leaks.length === 0 && sel2(d, 'cmp-caliber') === sel2(d, 'caliber') && sel2(d, 'cmp-weight') === sel2(d, 'weight') &&
         bPath(300) === aPath(300) && rowAt(300).cells.length === 12 && /same as your setup/.test($('compare-note').textContent));
     row('B’s caliber list has every caliber', $('caliber').options.length + ' calibers', $('cmp-caliber').options.length + ' calibers', $('cmp-caliber').options.length === w.BTS.calibers('rifle').length && $('caliber').options.length === $('cmp-caliber').options.length);
+    // B's own search narrows only B's list, and keeps its term while the setup changes.
+    const setupCount = $('caliber').options.length;
+    set(d, 'cmp-search', '6.5 creed');
+    row('Searching B’s list picks the first match for B', 'B: 6.5mm Creedmoor …, setup still 308', `${$('compare-name').textContent}, setup ${sel2(d, 'caliber').split(' (')[0]}`,
+        /^B: 6\.5mm Creedmoor \d+ gr$/.test($('compare-name').textContent) && /^308 Win/.test(sel2(d, 'caliber')) && $('caliber').options.length === setupCount &&
+        $('cmp-caliber').options.length < setupCount && /match “6\.5 creed”/.test($('cmp-count').textContent));
+    set(d, 'sight', $('sight').value, 'change');
+    row('B’s search is kept when the setup changes', '6.5mm Creedmoor, still filtered', `${sel2(d, 'cmp-caliber')}, ${$('cmp-caliber').options.length} shown`,
+        /^6\.5mm Creedmoor/.test(sel2(d, 'cmp-caliber')) && $('cmp-caliber').options.length < setupCount);
+    set(d, 'cmp-search', 'zzzz');
+    row('No match keeps B’s caliber', '6.5mm Creedmoor, No calibers match', `${sel2(d, 'cmp-caliber')}, ${$('cmp-count').textContent}`,
+        /^6\.5mm Creedmoor/.test(sel2(d, 'cmp-caliber')) && /No calibers match/.test($('cmp-count').textContent));
+    $('cmp-search').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    row('Escape clears B’s search and keeps its caliber', 'full list, 6.5mm Creedmoor', `${$('cmp-caliber').options.length} shown, ${sel2(d, 'cmp-caliber')}`,
+        $('cmp-search').value === '' && $('cmp-caliber').options.length === setupCount && /^6\.5mm Creedmoor/.test(sel2(d, 'cmp-caliber')) && $('cmp-count').textContent === '');
+    $('cmp-stop').click(); $('cmp-open').click();
     set(d, 'cmp-zero', optValue('cmp-zero', '200 yd'), 'change');
     row('B at a 200 yd zero is on the sight line at 200 yd and high at 100', '≈0 at 200, high at 100', `${bPath(200)} at 200, ${bPath(100)} at 100`, Math.abs(bPath(200)) < 0.05 && bPath(100) > 1);
     row('The table and legend name B', 'B: This load, 200 yd zero', `${$('compare-name').textContent} · ${/B: This load, 200 yd zero/.test($('traj-table').tHead.textContent) ? 'in the table' : 'not in the table'}`,
@@ -524,6 +540,9 @@ function set(d, id, value, ev = 'input') { const e = d.getElementById(id); e.val
     row('Loads saved earlier are listed when the page opens', 'Hot load', Array.from($('caliber').querySelectorAll('optgroup[label="My loads"] option')).map(o => o.textContent).join(', ') || 'none',
         !!Array.from($('caliber').options).find(o => o.textContent === 'Hot load'));
     $('cmp-open').click();
+    set(d, 'cmp-search', 'hot');
+    row('B’s search finds my loads', 'Hot load', sel2(d, 'cmp-caliber'), sel2(d, 'cmp-caliber') === 'Hot load');
+    set(d, 'cmp-search', '');
     set(d, 'cmp-caliber', optValue('cmp-caliber', 'Hot load'), 'change');
     row('One of my loads can be compared', 'B: Hot load, faster so higher at 300', `${$('compare-name').textContent}, ${bPath(300)} vs ${aPath(300)}`,
         $('cmp-caliber').querySelector('optgroup[label="My loads"]') && $('compare-name').textContent === 'B: Hot load' && $('cmp-weight').disabled && bPath(300) > aPath(300));

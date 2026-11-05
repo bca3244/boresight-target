@@ -211,10 +211,15 @@
         </div>
         <div class="load-form" id="cmp-form" hidden>
           <h3>Compare with (B)</h3>
-          <label class="mini">
-            <span id="cmp-caliber-label">Caliber or load</span>
+          <div class="mini">
+            <label for="cmp-caliber" id="cmp-caliber-label">Caliber or load</label>
+            <span class="search">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+              <input id="cmp-search" type="search" placeholder="Search calibers and loads" aria-label="Search calibers and loads for B" autocomplete="off" spellcheck="false">
+            </span>
             <select id="cmp-caliber"></select>
-          </label>
+            <span class="hint" id="cmp-count"></span>
+          </div>
           <div class="load-form-row">
             <label class="mini"><span>Bullet weight</span><select id="cmp-weight"></select></label>
             <label class="mini"><span>Bullet shape</span><select id="cmp-shape"></select></label>

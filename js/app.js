@@ -160,7 +160,8 @@
   // Caliber options keep their position in the full list as their value, so filtering never changes what idx() means.
   // Every word typed must appear in the name: "6.5 creed" finds "6.5mm Creedmoor".
   // Your loads come first, in their own group.
-  function fillCalibers(keepIndex, term) {
+  // Fills a caliber select (the setup's or B's) and its match count; used by both lists.
+  function fillCaliberSelect(select, count, keepIndex, term) {
     const names = BTS.calibers(state.mode), loads = modeLoads();
     const all = loads.map((l, k) => ({ value: LOAD_BASE + k, name: l.name + (l === state.linkLoad ? ' (from link)' : ''), mine: true }))
       .concat(names.map((name, i) => ({ value: i, name })));
@@ -168,20 +169,21 @@
     const matches = all.filter(o => words.every(w => o.name.toLowerCase().includes(w)));
     let shown = matches.length ? matches : all.filter(o => o.value === keepIndex);
     if (!shown.length) shown = [all.find(o => !o.mine)];
-    el.caliber.innerHTML = '';
+    select.innerHTML = '';
     const group = label => { const g = document.createElement('optgroup'); g.label = label; return g; };
     const groups = loads.length ? { mine: group('My loads'), list: group(state.mode === 'shotgun' ? 'Gauges' : 'Calibers') } : null;
     shown.forEach(it => {
       const o = document.createElement('option');
       o.value = String(it.value);
       o.textContent = it.name;
-      (groups ? (it.mine ? groups.mine : groups.list) : el.caliber).appendChild(o);
+      (groups ? (it.mine ? groups.mine : groups.list) : select).appendChild(o);
     });
-    if (groups) [groups.mine, groups.list].forEach(g => { if (g.children.length) el.caliber.appendChild(g); });
-    el.caliber.value = String(shown.some(o => o.value === keepIndex) ? keepIndex : shown[0].value);
-    el.caliberCount.textContent = !words.length ? '' : matches.length
+    if (groups) [groups.mine, groups.list].forEach(g => { if (g.children.length) select.appendChild(g); });
+    select.value = String(shown.some(o => o.value === keepIndex) ? keepIndex : shown[0].value);
+    count.textContent = !words.length ? '' : matches.length
       ? `${matches.length} of ${all.length} match “${term.trim()}”` : `No calibers match “${term.trim()}”`;
   }
+  function fillCalibers(keepIndex, term) { fillCaliberSelect(el.caliber, el.caliberCount, keepIndex, term); }
   // Selects one of modeLoads() (clearing any search).
   function selectLoad(load) {
     el.caliberSearch.value = '';
@@ -1249,7 +1251,8 @@
   // Everything else on the page (targets, range card, clicks, point-blank range, printouts) keeps using the current setup.
   const cmp = {
     open: $('cmp-open'), stop: $('cmp-stop'), form: $('cmp-form'),
-    caliber: $('cmp-caliber'), weight: $('cmp-weight'), shape: $('cmp-shape'), zero: $('cmp-zero'),
+    caliber: $('cmp-caliber'), search: $('cmp-search'), count: $('cmp-count'),
+    weight: $('cmp-weight'), shape: $('cmp-shape'), zero: $('cmp-zero'),
     lists: {}
   };
   const cmpLoad = () => { const v = idx(cmp.caliber); return v >= LOAD_BASE ? modeLoads()[v - LOAD_BASE] || null : null; };
@@ -1262,15 +1265,13 @@
     if (pick < 0) { const k = loads.findIndex(l => l.name === keep.name); if (k >= 0) pick = LOAD_BASE + k; }
     if (pick < 0) pick = idx(el.caliber);
     $('cmp-caliber-label').textContent = state.mode === 'shotgun' ? 'Gauge or load' : 'Caliber or load';
-    cmp.caliber.innerHTML = '';
-    const add = (parent, value, text) => { const o = document.createElement('option'); o.value = String(value); o.textContent = text; parent.appendChild(o); };
-    const group = label => { const g = document.createElement('optgroup'); g.label = label; cmp.caliber.appendChild(g); return g; };
-    const mine = loads.length ? group('My loads') : null;
-    loads.forEach((l, k) => add(mine, LOAD_BASE + k, l.name + (l === state.linkLoad ? ' (from link)' : '')));
-    const list = loads.length ? group(state.mode === 'shotgun' ? 'Gauges' : 'Calibers') : cmp.caliber;
-    names.forEach((n, i) => add(list, i, n));
-    cmp.caliber.value = String(pick);
+    // Like the setup's list, the search is for rifles and pistols (a shotgun has only a few gauges).
+    cmp.search.parentElement.hidden = state.mode === 'shotgun';
+    if (state.mode === 'shotgun') cmp.search.value = '';
+    fillCaliberSelect(cmp.caliber, cmp.count, pick, cmp.search.value);
     const load = cmpLoad(), ci = idx(cmp.caliber);
+    // A search that leaves out B's caliber picks the first match, which starts on its own typical weight.
+    if (ci !== pick) keep = Object.assign({}, keep, { grains: null });
     if (load) {
       cmp.lists.weights = [{ label: loadWeightLabel(load.grains), grains: load.grains }];
       cmp.lists.shapes = [{ label: LOAD_SHAPE, index: -1 }];
@@ -1302,6 +1303,7 @@
   // B's lists depend on the firearm, units and my loads, so they're rebuilt with every render while comparing.
   function syncCompare() { if (state.compare) buildCompare(compareKeep(false)); }
   function openCompare() {
+    cmp.search.value = '';
     buildCompare(compareKeep(true));
     state.compare = true;
     cmp.form.hidden = false;
@@ -1371,6 +1373,12 @@
   const compareChanged = () => { syncCompare(); if (state.result && !state.result.error) { refreshTable(); drawChart(); } };
   cmp.caliber.addEventListener('change', () => { const k = compareKeep(false); k.grains = null; k.name = cmpName(); buildCompare(k); compareChanged(); });
   [cmp.weight, cmp.shape, cmp.zero].forEach(s => s.addEventListener('change', compareChanged));
+  // Searching narrows B's list the same way as the setup's (the term is used on every rebuild until it's cleared).
+  cmp.search.addEventListener('input', compareChanged);
+  cmp.search.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && cmp.search.value) { cmp.search.value = ''; compareChanged(); e.stopPropagation(); }
+    if (e.key === 'Enter') { e.preventDefault(); cmp.caliber.focus(); }
+  });
 
   // Rebuilds only the trajectory table (wind and table settings don't change the boresight solution).
   function refreshTable() {

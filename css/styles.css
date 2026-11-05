@@ -207,7 +207,7 @@ h2.card-head { flex-wrap: nowrap; }
 /* ---------- Barrel length ---------- */
 .barrel-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .mini { display: grid; gap: 4px; min-width: 0; }
-.mini > span:first-child { font-size: 12px; color: var(--faint); }
+.mini > span:first-child, .mini > label:first-child { font-size: 12px; color: var(--faint); }
 .mini .input-unit input { padding-right: 40px; -moz-appearance: textfield; appearance: textfield; }
 .mini input::-webkit-outer-spin-button, .mini input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .optional { font-size: 11px; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--faint); }
