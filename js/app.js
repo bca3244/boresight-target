@@ -160,11 +160,13 @@
   // Caliber options keep their position in the full list as their value, so filtering never changes what idx() means.
   // Every word typed must appear in the name: "6.5 creed" finds "6.5mm Creedmoor".
   // Your loads come first, in their own group.
+  // Calibers are listed by name, numbers in numeric order ("30-06" before "300", "6.5" before "6mm"); their values stay data positions.
+  const CALIBER_ORDER = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
   // Fills a caliber select (the setup's or B's) and its match count; used by both lists.
   function fillCaliberSelect(select, count, keepIndex, term) {
     const names = BTS.calibers(state.mode), loads = modeLoads();
     const all = loads.map((l, k) => ({ value: LOAD_BASE + k, name: l.name + (l === state.linkLoad ? ' (from link)' : ''), mine: true }))
-      .concat(names.map((name, i) => ({ value: i, name })));
+      .concat(names.map((name, i) => ({ value: i, name })).sort((a, b) => CALIBER_ORDER.compare(a.name, b.name)));
     const words = term.toLowerCase().split(/\s+/).filter(Boolean);
     const matches = all.filter(o => words.every(w => o.name.toLowerCase().includes(w)));
     let shown = matches.length ? matches : all.filter(o => o.value === keepIndex);
@@ -716,7 +718,7 @@
       // Version-1 links point into a coarser weight list; find the same weight in today's list.
       const old = BTS.v1Weights(state.mode, idx(el.caliber), metric())[n(m[4])];
       if (old) pick(el.weight, nearestIndex(state.lists.weights, old.grains, w => w.grains));
-    } else pick(el.weight, n(m[4]));
+    } else pick(el.weight, Math.min(n(m[4]), el.weight.options.length - 1));   // a list's top can come down when data is corrected
     buildShapes(null); pick(el.shape, n(m[5]));
     buildZeros(null); pick(el.zero, n(m[6]));
     resetBarrel();

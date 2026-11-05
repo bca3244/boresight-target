@@ -58,7 +58,18 @@ function set(d, id, value, ev = 'input') { const e = d.getElementById(id); e.val
   set(d, 'caliber-search', '6.5 creed');
   row('Multi-word search', '6.5mm Creedmoor', sel('caliber'), sel('caliber') === '6.5mm Creedmoor');
   set(d, 'caliber-search', '');
-  row('Clearing shows all calibers again', '189', String(d.getElementById('caliber').options.length), d.getElementById('caliber').options.length === 189);
+  row('Clearing shows all calibers again', String(w.BTS.calibers('rifle').length), String(d.getElementById('caliber').options.length), d.getElementById('caliber').options.length === w.BTS.calibers('rifle').length);
+  {
+    const texts = Array.from(d.getElementById('caliber').options).map(o => o.textContent), order = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
+    const sorted = texts.every((t, i) => i === 0 || order.compare(texts[i - 1], t) <= 0);
+    row('The caliber list is in name order, numbers in numeric order', '30-06 before 300 Blackout, 7mm PRC listed', `${sorted ? 'sorted' : 'not sorted'}, ${texts.indexOf('30-06 Springfield') < texts.indexOf('300 Blackout') ? '30-06 first' : '300 first'}, ${texts.includes('7mm PRC') ? '7mm PRC listed' : 'no 7mm PRC'}`,
+        sorted && texts.indexOf('30-06 Springfield') < texts.indexOf('300 Blackout') && texts.includes('7mm PRC'));
+    set(d, 'caliber-search', '7mm prc');
+    row('A caliber added later works like the others', '7mm PRC · 175 gr · 2981 fps', `${sel('caliber')} · ${sel('weight')} · ${d.getElementById('velocity').value} fps`,
+        sel('caliber') === '7mm PRC' && sel('weight') === '175 gr' && d.getElementById('velocity').value === '2981');
+    set(d, 'caliber-search', '6.5 creed');
+    set(d, 'caliber-search', '');
+  }
 
   // Trajectory table.
   const rows = d.querySelectorAll('#traj-table tbody tr');
@@ -410,7 +421,7 @@ function set(d, id, value, ev = 'input') { const e = d.getElementById(id); e.val
         sel2(d, 'caliber') === 'Test 168 handload' && sel2(d, 'weight') === '168 gr' && $('velocity').value === '2650' && $('bc').value === '0.462' && !shown('load-form'));
     row('Its weight and shape are fixed', 'both disabled', $('weight').disabled && $('shape').disabled ? 'both disabled' : 'editable', $('weight').disabled && $('shape').disabled);
     const groups = Array.from(d.querySelectorAll('#caliber optgroup')).map(g => g.label + ' ' + g.children.length);
-    row('My loads come first in the caliber list', 'My loads 1, Calibers 189', groups.join(', '), groups.join(', ') === 'My loads 1, Calibers 189');
+    row('My loads come first in the caliber list', `My loads 1, Calibers ${w.BTS.calibers('rifle').length}`, groups.join(', '), groups.join(', ') === `My loads 1, Calibers ${w.BTS.calibers('rifle').length}`);
     const stored = JSON.parse(w.localStorage.getItem('bts.loads') || '[]');
     row('The load is kept in this browser', '1 rifle load', stored.length + ' ' + (stored[0] && stored[0].mode) + ' load', stored.length === 1 && stored[0].fps === 2650 && stored[0].grains === 168);
     row('Edit and Delete show for a saved load', 'shown', !$('load-edit').hidden && !$('load-delete').hidden && $('load-keep').hidden ? 'shown' : 'hidden', !$('load-edit').hidden && !$('load-delete').hidden && $('load-keep').hidden);

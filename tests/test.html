@@ -217,6 +217,44 @@ row('Sight cutoff: 1.5 in starts at 8', 8, BTS.targetRanges(1.5, 44.9)[0], BTS.t
   });
   row('350 Legend boat-tail is above its pointed bullet', 'boat-tail higher', `${bcOf('rifle', '350 Legend', 150, 'Boat-Tail').toFixed(3)} vs ${bcOf('rifle', '350 Legend', 150, 'Pointed').toFixed(3)}`,
       bcOf('rifle', '350 Legend', 150, 'Boat-Tail') > bcOf('rifle', '350 Legend', 150, 'Pointed'));
+  // Calibers added later, and the rows refitted to factory loads: [mode, caliber, grains, shape, fps, G1 B.C. or null].
+  [['rifle', '7mm PRC', 175, 'Boat-Tail', 3000, 0.689], ['rifle', '7mm PRC', 180, 'Boat-Tail', 2975, null],
+   ['rifle', '300 Norma Magnum', 215, 'Boat-Tail', 3017, 0.691], ['rifle', '300 Norma Magnum', 230, 'Boat-Tail', 2950, 0.743],
+   ['rifle', '7mm Backcountry', 170, 'Boat-Tail', 3150, 0.645], ['rifle', '22 ARC', 75, 'Boat-Tail', 3075, 0.467], ['rifle', '22 ARC', 88, 'Boat-Tail', 2820, 0.545],
+   ['rifle', '400 Legend', 215, 'Pointed', 2250, 0.206], ['rifle', '360 Buckhammer', 180, 'Flat Point', 2400, 0.178], ['rifle', '360 Buckhammer', 200, 'Flat Point', 2200, 0.181],
+   ['rifle', '458 SOCOM', 300, 'Flat Point', 1850, null], ['rifle', '277 SIG Fury (6.8x51mm)', 150, 'Boat-Tail', 2950, null],
+   ['rifle', '224 Valkyrie', 60, 'Boat-Tail', 3300, null], ['rifle', '224 Valkyrie', 90, 'Boat-Tail', 2700, null], ['rifle', '30 Nosler', 180, 'Boat-Tail', 3200, null],
+   ['pistol', '30 Super Carry', 100, 'Flat Point', 1250, null], ['pistol', '30 Super Carry', 115, 'Flat Point', 1150, null]
+  ].forEach(([mode, name, g, shape, fps, bc]) => {
+    const v = vel(mode, name, g), b = bcOf(mode, name, g, shape);
+    row(`${name} ${g} gr: factory ${fps} fps${bc ? ', B.C. ' + bc : ''}`, `±60 fps${bc ? ', ±0.03' : ''}`, `${v} fps, ${isNaN(b) ? 'no ' + shape : b.toFixed(3)}`,
+        near(v, fps, 60) && !isNaN(b) && (!bc || near(b, bc, 0.03)));
+  });
+  // 30 Nosler's top weight came down (265 to 215 gr): every weight still in the list keeps its position, in both units.
+  {
+    const ni = BTS.calibers('rifle').indexOf('30 Nosler'), r = BTS_DATA.rifle[ni], now = [false, true].map(m => BTS.weights('rifle', ni, m));
+    r[3] = 265; const before = [false, true].map(m => BTS.weights('rifle', ni, m)); r[3] = 215;
+    const same = [0, 1].every(u => now[u].every((w, i) => Math.abs(w.grains - before[u][i].grains) < 1e-9));
+    row('30 Nosler: weights keep their link positions', 'same positions, list ends at 258 gr', `${same ? 'same positions' : 'positions moved'}, ends at ${now[0][now[0].length - 1].label}`, same && now[0][now[0].length - 1].grains === 258);
+  }
+  // Every row: a sane diameter, range, velocity and B.C. at both ends of its weight list, and no repeated names.
+  {
+    const bad = [];
+    ['rifle', 'pistol'].forEach(mode => {
+      const names = BTS.calibers(mode);
+      names.forEach((name, i) => {
+        const r = BTS_DATA[mode][i], ws = BTS.weights(mode, i, false), ends = [ws[0], ws[ws.length - 1]];
+        if (names.indexOf(name) !== i) bad.push(`${mode} ${name}: listed twice`);
+        if (!(r[1] >= 0.17 && r[1] <= 0.52)) bad.push(`${mode} ${name}: diameter ${r[1]}`);
+        if (!(r[2] <= r[3]) || !(r[5] >= 0)) bad.push(`${mode} ${name}: range or slope`);
+        ends.forEach(w => { const v = BTS.typicalVelocityFps(mode, i, w); if (!(v >= 500 && v <= 4600)) bad.push(`${mode} ${name} ${w.label}: ${v} fps`); });
+        const shapes = BTS.shapes(mode, i);
+        if (!shapes.length) bad.push(`${mode} ${name}: no shapes`);
+        shapes.forEach(s => ends.forEach(w => { const b = BTS.typicalBc(mode, i, w, s.index); if (!(b >= 0.02 && b <= 1.1)) bad.push(`${mode} ${name} ${w.label} ${s.label}: B.C. ${b}`); }));
+      });
+    });
+    row('Every caliber row is sane (diameter, range, velocity 500–4600 fps, B.C. 0.02–1.1, unique name)', 'no problems', bad.length ? bad.slice(0, 6).join('; ') + (bad.length > 6 ? ` … ${bad.length} in all` : '') : 'no problems', !bad.length);
+  }
   const common = BTS_DATA.rifle.filter(r => r[7] != null).concat(BTS_DATA.pistol.filter(r => r[7] != null));
   const outside = common.filter(r => r[7] < r[2] || r[7] > r[3]).map(r => r[0]);
   row('Common weights sit inside the typical range', common.length + ' rows, none outside', outside.length ? outside.join(', ') : common.length + ' rows, none outside', !outside.length && common.length > 20);
