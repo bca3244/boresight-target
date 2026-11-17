@@ -675,6 +675,40 @@ function set(d, id, value, ev = 'input') { const e = d.getElementById(id); e.val
     row('B can be filled from the current Setup', '308 Win 150 gr', $('cmp-b-name').textContent, $('cmp-b-name').textContent === '308 Win 150 gr');
     set(d, 'cmp-a-mode', 'pistol', 'change');
     row('A can be a pistol while B stays a rifle', '9mm Luger … · 308 Win 150 gr', `${$('cmp-a-name').textContent} · ${$('cmp-b-name').textContent}`, /^9mm Luger/.test($('cmp-a-name').textContent) && $('cmp-b-name').textContent === '308 Win 150 gr');
+    // Difference column, reference marks, link and print.
+    const diffOf = label => { const r = Array.from($('cmp-summary').tBodies[0].rows).find(r => r.cells[0] && r.cells[0].firstChild && r.cells[0].firstChild.textContent === label); return r ? r.cells[3].textContent : ''; };
+    row('B − A column shows the difference (308 150 gr vs 9mm 115 gr)', '+35.0 gr (+30%)', diffOf('Weight'), diffOf('Weight') === '+35.0 gr (+30%)');
+    d.querySelector('[data-cmp-chart="energy"]').click();
+    row('Energy chart marks the deer, elk and moose levels', '3 lines', $('cmp-chart').querySelectorAll('.ref-line').length + ' lines', $('cmp-chart').querySelectorAll('.ref-line').length === 3);
+    d.querySelector('[data-cmp-chart="velocity"]').click();
+    row('Velocity chart marks the speed of sound', '1 line', $('cmp-chart').querySelectorAll('.ref-line').length + ' line', $('cmp-chart').querySelectorAll('.ref-line').length === 1);
+    d.querySelector('[data-cmp-chart="path"]').click();
+    row('Path chart shades the vital zone', 'band shown', $('cmp-chart').querySelector('.vital-band') ? 'band shown' : 'no band', !!$('cmp-chart').querySelector('.vital-band'));
+    // A comparison whose B is a load that isn't in My loads still opens from a link.
+    const link = (() => {
+      const o = { a: { m: 'rifle', n: '30-06 Springfield', g: 165, s: 'Pointed', h: 1.5 }, b: { m: 'rifle', n: 'Test link load', g: 168, s: 'From load', h: 1.5, L: [168, 2650, 0.462] }, z: 200, zb: 200, sp: 0, x: 400, c: 'energy', t: 'impact' };
+      return 'compare=' + btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    })();
+    const savedCmp = (() => { try { return w.localStorage.getItem('bts.compare'); } catch (e) { return null; } })();
+    w.location.hash = link;
+    await new Promise(res => setTimeout(res, 150));
+    row('A comparison link opens Compare with both loads', '30-06 Springfield 165 gr · Test link load', `${$('cmp-a-name').textContent} · ${$('cmp-b-name').textContent}`,
+        !$('compare-view').hidden && $('cmp-a-name').textContent === '30-06 Springfield 165 gr' && $('cmp-b-name').textContent === 'Test link load');
+    row('A load from the link is marked and kept out of My loads', '(from link), not saved', `${$('cmp-b-caliber').selectedOptions[0].textContent}, ${w.BTS_APP.state.loads.some(l => l.name === 'Test link load') ? 'saved' : 'not saved'}`,
+        /\(from link\)$/.test($('cmp-b-caliber').selectedOptions[0].textContent) && !w.BTS_APP.state.loads.some(l => l.name === 'Test link load'));
+    row('The link brings its zero, distance, chart and table', '200 yd, 400 yd, energy, impact',
+        `${$('cmp-zero').selectedOptions[0].textContent}, ${$('cmp-max').selectedOptions[0].textContent}, ${d.querySelector('[data-cmp-chart][aria-pressed="true"]').dataset.cmpChart}, ${d.querySelector('[data-cmp-table][aria-pressed="true"]').dataset.cmpTable}`,
+        $('cmp-zero').selectedOptions[0].textContent === '200 yd' && $('cmp-max').selectedOptions[0].textContent === '400 yd' && !!d.querySelector('[data-cmp-chart="energy"][aria-pressed="true"]') && !!d.querySelector('[data-cmp-table="impact"][aria-pressed="true"]'));
+    row('Opening the link leaves a plain address', '(no hash)', w.location.hash || '(no hash)', !w.location.hash || /^#2/.test(w.location.hash));
+    const realPrint = w.print;
+    w.print = () => {};
+    $('cmp-print').click();
+    const sheet = $('print-root').textContent;
+    w.print = realPrint;
+    row('Print comparison builds a two-page sheet', 'Load Comparison, 2 pages', `${/Load Comparison/.test(sheet) ? 'Load Comparison' : 'missing'}, ${$('print-root').querySelectorAll('.sheet').length} pages`,
+        /Load Comparison/.test(sheet) && $('print-root').querySelectorAll('.sheet').length === 2 && /Test link load/.test(sheet));
+    $('print-root').innerHTML = '';
+    try { if (savedCmp) w.localStorage.setItem('bts.compare', savedCmp); } catch (e) { /* storage blocked */ }
     row('Compare doesn’t change Setup', before, w.BTS_APP.shareCode(), w.BTS_APP.shareCode() === before);
     const leaks = Array.from(d.querySelectorAll('[hidden]')).filter(e => getComputedStyle(e).display !== 'none').map(e => e.id || e.className || e.tagName);
     row('In Compare, everything marked hidden is off the screen', 'none showing', leaks.length ? 'showing: ' + leaks.join(', ') : 'none showing', leaks.length === 0);

@@ -512,7 +512,8 @@ body.in-field .foot, body.in-field .paper { display: none; }
 table.cmp-sum th[scope="row"] { text-align: left; color: var(--muted); font-weight: 500; text-transform: none; letter-spacing: 0; font-size: 14px; }
 table.cmp-sum td, table.cmp-sum th { white-space: normal; }
 table.cmp-sum thead th { font-size: 13px; }
-table.cmp-sum td { width: 34%; }
+table.cmp-sum td { width: 25%; }
+table.cmp-sum td.diff, table.cmp-sum th.diff-h { color: var(--muted); font-size: 13px; }
 table.cmp-sum tr.grp th { text-align: left; padding-top: 16px; color: var(--text); font-size: 12px; }
 table.cmp-sum td.win { color: var(--text); font-weight: 700; }
 table.cmp-sum .mk { color: var(--accent); font-size: 11px; }
@@ -522,3 +523,22 @@ table.data .cmp, table.data th.side-b-h { color: var(--compare); }
 #cmp-chart .tooltip .t-a { color: var(--path); }
 @media (max-width: 860px) { .cmp-sides { grid-template-columns: 1fr; } }
 body.in-compare .paper { display: none; }
+.cmp-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.cmp-actions svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+/* Printed comparison */
+.cmp-sheet .cmp-print-sum { font-size: 9.5pt; }
+.cmp-sheet .cmp-print-sum th, .cmp-sheet .cmp-print-sum td { padding: 1.6pt 6pt; vertical-align: top; }
+.cmp-sheet .cmp-print-sum th[scope="row"] { width: 40%; font-weight: 500; color: #333; }
+.cmp-sheet .cmp-print-sum td { width: 20%; white-space: nowrap; }
+.cmp-sheet .cmp-print-sum thead th { font-weight: 700; color: #111; width: auto; }
+.cmp-sheet .cmp-print-sum .side-a-h { color: #8a6100; }
+.cmp-sheet .cmp-print-sum .side-b-h { color: #6a2fb0; }
+.cmp-sheet .cmp-print-sum tr.grp th { padding-top: 6pt; font-size: 8.5pt; text-transform: uppercase; letter-spacing: 0.04em; color: #0f7d6e; border-bottom: 0.8pt solid #999; }
+.cmp-sheet .cmp-print-sum td.win { font-weight: 700; }
+.cmp-sheet .cmp-print-sum .mk { color: #0f9d8a; font-size: 7.5pt; }
+.cmp-sheet .cmp-print-sum .sub { display: block; color: #777; font-size: 7.5pt; font-weight: 400; }
+.cmp-sheet .cmp-print-sum td.diff, .cmp-sheet .cmp-print-sum .diff-h { color: #555; }
+.cmp-sheet .report-traj td.cmp, .cmp-sheet .report-traj th.side-b-h { color: #6a2fb0; }
+.cmp-sheet .report-traj th.side-a-h { color: #8a6100; }
+.cmp-sheet .report-traj th.grp { text-align: center; }
+.cmp-sheet .cmp-print-charts { gap: 10pt; }
