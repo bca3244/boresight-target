@@ -1678,8 +1678,12 @@
   });
 
   // Remember whether the how-to card is open.
-  el.how.open = loadPref('how', 'open') === 'open';
-  el.how.addEventListener('toggle', () => savePref('how', el.how.open ? 'open' : 'closed'));
+  // "How to use it" opens on the first visit on a wide screen; after that it stays the way you left it.
+  const howPref = loadPref('how', '');
+  el.how.open = howPref ? howPref === 'open' : !loadPref('visited', '') && !window.matchMedia('(max-width: 520px)').matches;
+  savePref('visited', '1');
+  // Saved on a click, not on 'toggle', which also fires for the line above.
+  el.how.querySelector('summary').addEventListener('click', () => setTimeout(() => savePref('how', el.how.open ? 'open' : 'closed')));
 
   let resizeTimer = 0;
   window.addEventListener('resize', () => {
@@ -1689,6 +1693,17 @@
 
   // Reset: forget every preference (units, paper, wind, table, clicks, folded cards, …) and open the plain page.
   // Saved setups and my loads are data, not settings, so they stay.
+  // Settings menu: units, theme, paper size and reset, behind the gear button.
+  const settingsBtn = $('settings-btn'), settingsPanel = $('settings-panel');
+  function setSettings(open) {
+    settingsPanel.hidden = !open;
+    settingsBtn.setAttribute('aria-expanded', String(open));
+    if (open) (settingsPanel.querySelector('[aria-pressed="true"]') || settingsPanel.querySelector('button')).focus();
+  }
+  settingsBtn.addEventListener('click', () => setSettings(settingsPanel.hidden));
+  document.addEventListener('click', e => { if (!settingsPanel.hidden && !e.target.closest('.settings')) setSettings(false); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !settingsPanel.hidden) { setSettings(false); settingsBtn.focus(); } });
+
   const KEEP_ON_RESET = ['bts.saved', 'bts.loads'];
   $('reset-all').addEventListener('click', () => {
     if (!window.confirm('Reset all settings to their defaults? Your saved setups and loads are kept.')) return;
@@ -2142,7 +2157,7 @@
     const pbrText = r => r.pbr.over ? `none (rises ${len1(r.pbr.apexIn)})` : (r.pbr.endYd == null ? `${dist(r.pbr.startYd)} to past ${dist(PBR_MAX_YD)}` : `${Math.round(toDispDist(r.pbr.startYd))}–${dist(r.pbr.endYd)}`);
     const sign = (v, dig) => (v > 0 ? '+' : v < 0 ? '−' : '±') + Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: dig, maximumFractionDigits: dig });
     // Difference formatters: `d(aN, bN)` gets the raw numbers and returns text in display units.
-    const diffIn = (dig, unit, conv = x => x) => (a, b) => `${sign(conv(b) - conv(a), dig)}${unit ? ' ' + unit : ''}` + (conv(a) ? ` (${sign((conv(b) - conv(a)) / Math.abs(conv(a)) * 100, 0)}%)` : '');
+    const diffIn = (dig, unit, conv = x => x) => (a, b) => `${sign(conv(b) - conv(a), dig)}${unit ? ' ' + unit : ''}` + (conv(a) ? `<span class="pct">${sign((conv(b) - conv(a)) / Math.abs(conv(a)) * 100, 0)}%</span>` : '');
     const diffDist = (a, b) => isFinite(a) && isFinite(b) ? `${sign(Math.round(toDispDist(b)) - Math.round(toDispDist(a)), 0)} ${u.d}` : '–';
     const rows = [];
     const row = (label, a, b, opts = {}) => rows.push(Object.assign({ label, a, b }, opts));

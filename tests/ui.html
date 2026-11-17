@@ -520,8 +520,8 @@ function set(d, id, value, ev = 'input') { const e = d.getElementById(id); e.val
           d.getElementById('wind').value + ' mph', d.getElementById('traj-card').classList.contains('collapsed') ? 'table folded' : 'table open'].join(', '),
         d.querySelector('[data-units="english"]').getAttribute('aria-pressed') === 'true' && sel2(d, 'paper') === 'Letter' && sel2(d, 'caliber') === '308 Win (7.62x51mm)' &&
         sel2(d, 'slope') === 'Level' && d.getElementById('wind').value === '10' && !d.getElementById('traj-card').classList.contains('collapsed'));
-    row('Reset keeps saved setups and loads', 'Keep me, Kept load', JSON.parse(ls.getItem('bts.saved') || '[]').map(s => s.name).concat(JSON.parse(ls.getItem('bts.loads') || '[]').map(l => l.name)).join(', ') + ' · others: ' + Object.keys(ls).filter(k => k.startsWith('bts.') && !['bts.saved', 'bts.loads'].includes(k)).join(' '),
-        ls.getItem('bts.saved') && ls.getItem('bts.loads') && Object.keys(ls).filter(k => k.startsWith('bts.') && !['bts.saved', 'bts.loads'].includes(k) && !(k === 'bts.how' && ls.getItem(k) === 'open')).length === 0);
+    row('Reset keeps saved setups and loads', 'Keep me, Kept load', JSON.parse(ls.getItem('bts.saved') || '[]').map(s => s.name).concat(JSON.parse(ls.getItem('bts.loads') || '[]').map(l => l.name)).join(', ') + ' · others: ' + Object.keys(ls).filter(k => k.startsWith('bts.') && !['bts.saved', 'bts.loads', 'bts.visited'].includes(k)).join(' '),
+        ls.getItem('bts.saved') && ls.getItem('bts.loads') && Object.keys(ls).filter(k => k.startsWith('bts.') && !['bts.saved', 'bts.loads', 'bts.visited'].includes(k) && !(k === 'bts.how' && ls.getItem(k) === 'open')).length === 0);
     set(d, 'zero', '3', 'change');
     row('Changing something after a reset writes the code again', 'a code in the address', w.location.hash || 'none', /^#2/.test(w.location.hash));
     ls.removeItem('bts.saved'); ls.removeItem('bts.loads');
@@ -677,7 +677,7 @@ function set(d, id, value, ev = 'input') { const e = d.getElementById(id); e.val
     row('A can be a pistol while B stays a rifle', '9mm Luger … · 308 Win 150 gr', `${$('cmp-a-name').textContent} · ${$('cmp-b-name').textContent}`, /^9mm Luger/.test($('cmp-a-name').textContent) && $('cmp-b-name').textContent === '308 Win 150 gr');
     // Difference column, reference marks, link and print.
     const diffOf = label => { const r = Array.from($('cmp-summary').tBodies[0].rows).find(r => r.cells[0] && r.cells[0].firstChild && r.cells[0].firstChild.textContent === label); return r ? r.cells[3].textContent : ''; };
-    row('B − A column shows the difference (308 150 gr vs 9mm 115 gr)', '+35.0 gr (+30%)', diffOf('Weight'), diffOf('Weight') === '+35.0 gr (+30%)');
+    row('B − A column shows the difference (308 150 gr vs 9mm 115 gr)', '+35.0 gr +30%', diffOf('Weight'), diffOf('Weight') === '+35.0 gr+30%');
     d.querySelector('[data-cmp-chart="energy"]').click();
     row('Energy chart marks the deer, elk and moose levels', '3 lines', $('cmp-chart').querySelectorAll('.ref-line').length + ' lines', $('cmp-chart').querySelectorAll('.ref-line').length === 3);
     d.querySelector('[data-cmp-chart="velocity"]').click();
