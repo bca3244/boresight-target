@@ -572,3 +572,13 @@ table.data .cmp, table.data th.side-b-h { color: var(--compare); }
   table.cmp-sum th[scope="row"] { font-size: 13px; }
   table.cmp-sum .sub { display: none; }
 }
+
+/* Desktop: the Setup column stays in view (scrolling on its own if it's taller than the window) while the results scroll. */
+@media (min-width: 921px) {
+  .side {
+    position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; overscroll-behavior: contain;
+    scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; padding: 0 6px 4px 0; margin-right: -6px;
+  }
+}
+/* Compare's chart: wide but not taller than about 380px. */
+#cmp-chart { aspect-ratio: auto; height: clamp(240px, 40vw, 380px); }
