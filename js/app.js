@@ -25,6 +25,16 @@
     barrelField: $('barrel-field'), barrelLen: $('barrel-len'), barrelRef: $('barrel-ref'), barrelRate: $('barrel-rate'),
     barrelRateUnit: $('b-rate-unit'), barrelNote: $('barrel-note'), barrelOn: $('barrel-on'), barrelRow: $('barrel-row')
   };
+  // Field mode (see the Field section near the end).
+  const fe = {
+    view: $('field-view'), setup: document.querySelector('main.layout'), name: $('f-name'), sub: $('f-sub'), chip: $('f-chip'),
+    savedWrap: $('f-saved-wrap'), saved: $('f-saved'), error: $('f-error'), body: $('f-body'), pbr: $('f-pbr'),
+    range: $('f-range'), minus: $('f-minus'), plus: $('f-plus'), presets: $('f-presets'),
+    elev: $('f-elev'), elevSub: $('f-elev-sub'), wind: $('f-wind'), windSub: $('f-wind-sub'), stats: $('f-stats'), warn: $('f-warn'),
+    windSpd: $('f-windspd'), windUnit: $('f-wind-unit'), wMinus: $('f-wminus'), wPlus: $('f-wplus'),
+    clock: $('f-clock'), slope: $('f-slope'), click: $('f-click'),
+    wakeWrap: $('f-wake-wrap'), wake: $('f-wake'), status: $('f-status')
+  };
 
   const DEFAULTS = {
     rifle: { caliber: '308 Win (7.62x51mm)', sightIn: 1.5, zero: 100 },
@@ -632,7 +642,7 @@
     // The calculator's shot distance follows the zero range until the user types their own.
     if (!el.cRange.dataset.edited) el.cRange.value = String(r.zero);
     updateClicks();
-    if (!ok) { el.chart.innerHTML = ''; el.compareKey.hidden = el.compareNote.hidden = true; syncUrl(); return; }
+    if (!ok) { el.chart.innerHTML = ''; el.compareKey.hidden = el.compareNote.hidden = true; syncUrl(); renderField(); return; }
     buildTargets(keepTarget);
     el.meet.textContent = r.meet.toFixed(1);
     el.meetUnit.textContent = metric() ? 'm' : 'yd';
@@ -640,6 +650,7 @@
     showWind();
     renderTable();
     renderTarget();
+    renderField();
   }
 
   function renderTarget() {
@@ -1399,6 +1410,7 @@
   function refreshTable() {
     const r = state.result;
     if (r && !r.error) { r.table = trajectoryRows(r.angle, r.sightIn, r.zero, r.zeroYd); addCompare(r); renderTable(); }
+    renderField();
   }
 
   el.barrelOn.addEventListener('change', () => {
@@ -1558,6 +1570,7 @@
     savePref('click', value);
     updateClicks();
     if (state.result && !state.result.error) renderCard();
+    renderField();
   }
   el.cClick.addEventListener('change', () => setClick(el.cClick.value));
   el.cardClick.addEventListener('change', () => setClick(el.cardClick.value));
@@ -1592,6 +1605,7 @@
     el.savedSave.disabled = el.savedName.disabled = !available;
     el.savedCount.textContent = has ? String(list.length) : '';
     if (!available) el.savedNote.textContent = 'This browser is blocking site storage, so setups can’t be saved here. Copy link still works.';
+    fillFieldSaved();
   }
   function suggestedName() {
     return caliberName() + ' · ' + state.lists.weights[idx(el.weight)].label + ' · ' +
@@ -1823,6 +1837,215 @@
     location.replace(location.pathname);   // the base URL: no settings code, no query
   });
 
+  // ---------- Field mode: range in, holds out ----------
+  // Field never changes the profile (caliber, load, sight, zero); it only reads it. Range, wind, shot angle and click size
+  // are per-viewer preferences shared with Setup's trajectory table and range card. The range is kept in yards per firearm type.
+  const FIELD_PRESETS = { rifle: [100, 150, 200, 250, 300, 400], pistol: [15, 25, 50, 75, 100], shotgun: [25, 50, 75, 100, 125] };
+  const FIELD_STEP = { rifle: 10, pistol: 5, shotgun: 5 };
+  const FIELD_MAX_YD = 2000;
+  const SOUND_FPS = 1116, TRANSONIC_FPS = 1340;   // speed of sound at 59 °F, and about Mach 1.2
+  state.view = loadPref('view', 'setup') === 'field' ? 'field' : 'setup';
+  state.theme = ['sun', 'night'].includes(loadPref('theme', 'dark')) ? loadPref('theme', 'dark') : 'dark';
+
+  const toDispDist = yd => (metric() ? yd * BTS.METERS_PER_YARD : yd);
+  const fromDispDist = d => (metric() ? d / BTS.METERS_PER_YARD : d);
+  const roundDist = d => Math.round(d * 10) / 10;
+  function fieldYd() {
+    const v = parseFloat(loadPref('field.' + state.mode, ''));
+    if (v >= 1 && v <= FIELD_MAX_YD) return v;
+    return state.result && state.result.zeroYd ? state.result.zeroYd : DEFAULTS[state.mode].zero;
+  }
+  function setFieldYd(yd) {
+    savePref('field.' + state.mode, String(Math.max(1, Math.min(FIELD_MAX_YD, yd))));
+    renderField();
+  }
+
+  function renderField() {
+    if (state.view !== 'field') return;
+    const r = state.result, u = trajectoryUnits(), load = currentLoad();
+    // Active profile: a saved setup's name when the current settings match one.
+    const code = shareCode(), saved = (readSaved() || []).find(s => s.code === code);
+    const w = state.lists.weights[idx(el.weight)];
+    const desc = `${caliberName()} · ${w ? w.label : ''}`;
+    fe.name.textContent = saved ? saved.name : desc;
+    fe.sub.textContent = (saved ? desc + ' · ' : '') + `${r.zero} ${u.d} zero · ` +
+      (metric() ? BTS.roundHalfEven(r.vFps / FPS_PER_MPS) + ' m/s' : BTS.roundHalfEven(r.vFps) + ' fps') + (load || state.custom ? '' : ' (typical)');
+    fe.error.hidden = !r.error;
+    fe.error.innerHTML = r.error ? r.error + ' Change it in <button type="button" class="link" data-go="setup">Setup</button>.' : '';
+    fe.body.hidden = !!r.error;
+    if (r.error) return;
+
+    // Range, presets and conditions, in the displayed units.
+    const yd = fieldYd(), disp = roundDist(toDispDist(yd));
+    document.querySelectorAll('.f-dist').forEach(s => { s.textContent = u.d; });
+    if (document.activeElement !== fe.range) fe.range.value = String(disp);
+    const presets = FIELD_PRESETS[state.mode];
+    if (fe.presets.dataset.key !== state.mode + u.d) {
+      fe.presets.dataset.key = state.mode + u.d;
+      fe.presets.innerHTML = presets.map(p => `<button type="button" data-range="${p}" aria-label="${p} ${u.d}">${p}</button>`).join('');
+    }
+    fe.presets.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(Math.abs(Number(b.dataset.range) - disp) < 0.5)));
+    fe.windUnit.textContent = u.w;
+    if (document.activeElement !== fe.windSpd) fe.windSpd.value = String(windDisplay());
+    fe.clock.value = String(state.windClock);
+    fe.slope.value = String(state.slopeDeg);
+    fe.click.value = el.cClick.value;
+
+    // The holds at this range.
+    const p = BTS.trajectoryTable(r.vFps, r.bc, r.sightIn, r.angle, [yd], state.slopeDeg)[0];
+    if (!p) { fe.elev.textContent = fe.wind.textContent = '–'; return; }
+    const [unit, value] = el.cClick.value.split(':'), click = Number(value), uName = unit === 'mil' ? 'mil' : 'MOA', dig = unit === 'mil' ? 2 : 1;
+    const len = inch => (metric() ? inch * BTS.CM_PER_INCH : inch).toFixed(1) + ' ' + u.h;
+    const elevA = BTS.angleOf(p.y, yd, unit), elevN = Math.round(Math.abs(elevA) / click);
+    if (elevN === 0) {
+      fe.elev.innerHTML = '<span class="word">Dead-on</span>';
+      fe.elevSub.textContent = 'Within half a click' + (Math.abs(p.y) < 0.05 ? ' · on the aim point' : ` · bullet ${len(Math.abs(p.y))} ${p.y < 0 ? 'low' : 'high'}`);
+    } else {
+      fe.elev.innerHTML = `${elevN} <b>${elevA < 0 ? 'UP' : 'DOWN'}</b>`;
+      fe.elevSub.textContent = `${Math.abs(elevA).toFixed(dig)} ${uName} · bullet ${len(Math.abs(p.y))} ${p.y < 0 ? 'low' : 'high'}`;
+    }
+    const side = driftSide(), driftIn = BTS.windDriftIn(state.windMph * windFactor(), yd, p.t, r.vFps);
+    const windA = BTS.angleOf(driftIn, yd, unit), windN = side ? Math.round(Math.abs(windA) / click) : 0;
+    if (!side) {
+      fe.wind.innerHTML = '<span class="word">None</span>';
+      fe.windSub.textContent = state.windMph ? `${windDisplay()} ${u.w} from ${state.windClock} o'clock doesn't push sideways` : 'No crosswind entered';
+    } else {
+      fe.wind.innerHTML = windN ? `${windN} <b>${side === 'left' ? 'RIGHT' : 'LEFT'}</b>` : '<span class="word">None</span>';
+      fe.windSub.textContent = `${Math.abs(windA).toFixed(dig)} ${uName} · drifts ${len(Math.abs(driftIn))} ${side} · ${windText(u)}`;
+    }
+    const v = metric() ? p.v * 0.3048 : p.v, grains = w ? w.grains : 0;
+    const e = metric() ? BTS.energyFtLb(grains, p.v) * 1.35582 : BTS.energyFtLb(grains, p.v);
+    fe.stats.textContent = `${Math.round(v).toLocaleString()} ${u.v} · ${Math.round(e).toLocaleString()} ${u.e} · ${p.t.toFixed(3)} s` +
+      ` · ${el.cClick.selectedOptions[0] ? el.cClick.selectedOptions[0].textContent : ''}` +
+      (state.slopeDeg ? ` · ${slopeText(state.slopeDeg)}, line-of-sight range` : '');
+    const warn = r.vFps >= SOUND_FPS && p.v < SOUND_FPS ? 'Subsonic at this range: the bullet may destabilize, so confirm on paper.'
+      : r.vFps >= TRANSONIC_FPS && p.v < TRANSONIC_FPS ? 'Transonic at this range: expect more spread than the numbers suggest.' : '';
+    fe.warn.hidden = !warn;
+    fe.warn.textContent = warn;
+
+    // Point-blank range for the current zero and vital zone (level ground).
+    const half = state.vitalIn / 2, zone = len(state.vitalIn).replace('.0 ', ' ');
+    const mine = BTS.pointBlankAt(r.vFps, r.bc, r.sightIn, r.angle, half, PBR_MAX_YD);
+    const end = mine.endYd == null ? null : Math.round(toDispDist(mine.endYd)), level = state.slopeDeg ? ' (level ground)' : '';
+    const endTxt = end == null ? `past ${Math.round(toDispDist(PBR_MAX_YD))} ${u.d}` : `${end} ${u.d}`;
+    if (mine.apexIn > half + 0.005) {
+      fe.pbr.className = 'f-pbr out';
+      fe.pbr.innerHTML = `<strong>Use the holds.</strong> Your ${r.zero} ${u.d} zero rises ${len(mine.apexIn)} above a ${zone} vital zone.`;
+    } else if (yd >= mine.startYd - 1e-9 && (mine.endYd == null || yd <= mine.endYd + 1e-9)) {
+      fe.pbr.className = 'f-pbr in';
+      fe.pbr.innerHTML = `<strong>Aim dead-on.</strong> Inside point-blank range for a ${zone} vital zone: ${Math.round(toDispDist(mine.startYd))}–${endTxt}${level}.`;
+    } else {
+      fe.pbr.className = 'f-pbr out';
+      fe.pbr.innerHTML = yd < mine.startYd ? `<strong>Closer than point-blank range.</strong> It starts at ${Math.round(toDispDist(mine.startYd))} ${u.d} for a ${zone} vital zone.`
+        : `<strong>Past point-blank range.</strong> Dead-on works to ${endTxt} for a ${zone} vital zone${level}; use the holds.`;
+    }
+  }
+
+  // Saved setups as a quick profile switch (opening one changes nothing that's stored).
+  function fillFieldSaved() {
+    const list = (readSaved() || []).slice().sort((a, b) => a.name.localeCompare(b.name));
+    fe.savedWrap.hidden = !list.length;
+    fe.saved.innerHTML = '<option value="">Switch setup…</option>' + list.map(s => `<option value="${esc(s.name)}">${esc(s.name)}</option>`).join('');
+  }
+  fe.saved.addEventListener('change', () => {
+    const s = (readSaved() || []).find(x => x.name === fe.saved.value);
+    fe.saved.value = '';
+    if (s && applyShareCode('#' + s.code)) toast(`Opened “${s.name}”`);
+  });
+
+  fe.range.addEventListener('input', () => {
+    const v = parseFloat(fe.range.value), yd = fromDispDist(v);
+    if (yd >= 1 && yd <= FIELD_MAX_YD) setFieldYd(yd);
+  });
+  fe.range.addEventListener('blur', renderField);
+  function stepRange(dir) {
+    const step = FIELD_STEP[state.mode], cur = toDispDist(fieldYd());
+    const next = dir > 0 ? Math.floor(cur / step + 1e-9) * step + step : Math.ceil(cur / step - 1e-9) * step - step;
+    setFieldYd(fromDispDist(Math.max(step, next)));
+  }
+  fe.minus.addEventListener('click', () => stepRange(-1));
+  fe.plus.addEventListener('click', () => stepRange(1));
+  fe.presets.addEventListener('click', e => {
+    const b = e.target.closest('button[data-range]');
+    if (b) setFieldYd(fromDispDist(Number(b.dataset.range)));
+  });
+
+  // Conditions: the same preferences as Setup's trajectory controls.
+  function setWindDisplay(v) {
+    if (!(v >= 0 && v < 100)) return;
+    state.windMph = metric() ? v / KMH_PER_MPH : v;
+    savePref('wind', String(state.windMph));
+    showWind();
+    refreshTable();
+  }
+  fe.windSpd.addEventListener('input', () => setWindDisplay(fe.windSpd.value === '' ? 0 : parseFloat(fe.windSpd.value)));
+  fe.windSpd.addEventListener('blur', renderField);
+  fe.wMinus.addEventListener('click', () => setWindDisplay(Math.max(0, Math.ceil(windDisplay() - 1e-9) - 1)));
+  fe.wPlus.addEventListener('click', () => setWindDisplay(Math.min(99, Math.floor(windDisplay() + 1e-9) + 1)));
+  fe.clock.innerHTML = el.windClock.innerHTML;
+  fe.slope.innerHTML = el.slope.innerHTML;
+  fe.click.innerHTML = el.cClick.innerHTML;
+  fe.clock.addEventListener('change', () => { el.windClock.value = fe.clock.value; el.windClock.dispatchEvent(new Event('change')); });
+  fe.slope.addEventListener('change', () => { el.slope.value = fe.slope.value; el.slope.dispatchEvent(new Event('change')); });
+  fe.click.addEventListener('change', () => setClick(fe.click.value));
+  fe.chip.addEventListener('click', () => setView('setup'));
+  fe.error.addEventListener('click', e => { if (e.target.closest('[data-go]')) setView('setup'); });
+
+  // Keep the screen on while Field is showing (where the browser supports it); the lock drops when the page is hidden.
+  let wakeLock = null;
+  const wakeSupported = 'wakeLock' in navigator;
+  fe.wakeWrap.hidden = !wakeSupported;
+  fe.wake.checked = loadPref('wake', 'on') === 'on';
+  async function syncWake() {
+    const want = wakeSupported && state.view === 'field' && fe.wake.checked && document.visibilityState === 'visible';
+    if (want && !wakeLock) {
+      try {
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', () => { wakeLock = null; showFieldStatus(); });
+      } catch (e) { wakeLock = null; }
+    } else if (!want && wakeLock) {
+      const l = wakeLock; wakeLock = null;
+      l.release().catch(() => {});
+    }
+    showFieldStatus();
+  }
+  function showFieldStatus() {
+    const offline = 'serviceWorker' in navigator && !!navigator.serviceWorker.controller;
+    fe.status.textContent = [wakeLock ? 'Screen stays on' : '', offline ? 'Works offline' : ''].filter(Boolean).join(' · ');
+  }
+  fe.wake.addEventListener('change', () => { savePref('wake', fe.wake.checked ? 'on' : 'off'); syncWake(); });
+  document.addEventListener('visibilitychange', syncWake);
+
+  // Setup / Field tabs.
+  function setView(view, save = true) {
+    state.view = view;
+    if (save) savePref('view', view);
+    setPressed('[data-view]', 'data-view', view);
+    fe.setup.hidden = view === 'field';
+    fe.view.hidden = view !== 'field';
+    document.body.classList.toggle('in-field', view === 'field');
+    if (view === 'field') { fillFieldSaved(); renderField(); }
+    else if (state.result && !state.result.error) drawChart();   // drawn while hidden, the chart had no size
+    syncWake();
+    window.scrollTo(0, 0);
+  }
+  document.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => setView(b.dataset.view)));
+
+  // Themes: Dark, Sun (high contrast for bright light) and Night (red, keeps night vision).
+  const THEME_BG = { dark: '#0b0f14', sun: '#ffffff', night: '#000000' };
+  function setTheme(theme, save = true) {
+    state.theme = theme;
+    if (save) savePref('theme', theme);
+    if (theme === 'dark') document.documentElement.removeAttribute('data-theme');
+    else document.documentElement.setAttribute('data-theme', theme);
+    setPressed('[data-theme-pick]', 'data-theme-pick', theme);
+    document.querySelector('meta[name="color-scheme"]').content = theme === 'sun' ? 'light' : 'dark';
+    document.querySelector('meta[name="theme-color"]').content = THEME_BG[theme];
+    if (state.result && !state.result.error && state.view === 'setup') drawChart();
+  }
+  document.querySelectorAll('[data-theme-pick]').forEach(b => b.addEventListener('click', () => setTheme(b.dataset.themePick)));
+  setTheme(state.theme, false);
+
   // ---------- Start ----------
   const startHash = location.hash;
   if (!applyShareCode(startHash)) {
@@ -1863,6 +2086,7 @@
   if (!startHash) plainCode = shareCode();
   urlReady = true;
   syncUrl();
+  if (!document.body.classList.contains('previewing')) setView(state.view, false);
 
   // ---------- Offline and install ----------
   // The service worker keeps a copy of the site for use without a connection (not available when opened from disk).
