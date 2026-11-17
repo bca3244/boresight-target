@@ -59,6 +59,10 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/><circle cx="12" cy="12" r="1.5"/></svg>
           Field
         </button>
+        <button type="button" data-view="compare" aria-pressed="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M5 7h4M15 7h4M3 15l3-8 3 8M15 15l3-8 3 8M3 15a3 2 0 0 0 6 0M15 15a3 2 0 0 0 6 0"/></svg>
+          Compare
+        </button>
       </div>
     </div>
   </header>
@@ -219,33 +223,6 @@
         <select id="zero"></select>
         <span class="hint">Where the bullet should hit the center of the target.</span>
       </label>
-
-      <div class="field compare">
-        <div class="load-tools">
-          <button type="button" class="link" id="cmp-open">Compare with another load</button>
-        </div>
-        <div class="load-form" id="cmp-form" hidden>
-          <h3>Compare with (B)</h3>
-          <div class="mini">
-            <label for="cmp-caliber" id="cmp-caliber-label">Caliber or load</label>
-            <span class="search">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
-              <input id="cmp-search" type="search" placeholder="Search calibers and loads" aria-label="Search calibers and loads for B" autocomplete="off" spellcheck="false">
-            </span>
-            <select id="cmp-caliber"></select>
-            <span class="hint" id="cmp-count"></span>
-          </div>
-          <div class="load-form-row">
-            <label class="mini"><span>Bullet weight</span><select id="cmp-weight"></select></label>
-            <label class="mini"><span>Bullet shape</span><select id="cmp-shape"></select></label>
-            <label class="mini"><span>Zero range</span><select id="cmp-zero"></select></label>
-          </div>
-          <p class="hint">B shows as a dashed line on the chart and two columns in the trajectory table. It uses your sight height and barrel, typical velocities, and your own velocity and B.C. when it’s the same load.</p>
-          <div class="load-form-actions">
-            <button type="button" class="btn small" id="cmp-stop">Stop comparing</button>
-          </div>
-        </div>
-      </div>
     </section>
     </div>
 
@@ -310,10 +287,8 @@
           <span><i class="sw path"></i>Bullet path</span>
           <span><i class="sw laser"></i>Laser beam</span>
           <span class="rise-note"><i class="sw rise"></i><span id="max-rise">Max rise</span></span>
-          <span id="compare-key" hidden><i class="sw cmp"></i><span id="compare-name">B</span></span>
         </div>
         <div id="chart" class="chart"></div>
-        <p class="hint traj-hint" id="compare-note" hidden></p>
       </div>
 
       <div class="card" id="pbr-card" data-collapse="pbr">
@@ -504,6 +479,122 @@
     <div class="f-foot">
       <label class="check" id="f-wake-wrap" hidden><input type="checkbox" id="f-wake"> Keep screen on</label>
       <span class="hint" id="f-status"></span>
+    </div>
+  </main>
+
+  <main class="compare-view" id="compare-view" hidden aria-labelledby="cmp-title">
+    <h2 id="cmp-title" class="visually-hidden">Compare</h2>
+    <div class="cmp-sides">
+      <section class="card cmp-side" data-side="a" aria-labelledby="cmp-a-title">
+        <div class="cmp-side-head">
+          <h2 id="cmp-a-title"><span class="side-badge side-a" aria-hidden="true">A</span><span class="visually-hidden">Load A: </span><span id="cmp-a-name">–</span></h2>
+          <label class="cmp-from" id="cmp-a-from-wrap">
+            <span class="visually-hidden">Fill load A from a saved setup</span>
+            <select id="cmp-a-from"></select>
+          </label>
+        </div>
+        <div class="load-form-row">
+          <label class="mini"><span>Firearm</span><select id="cmp-a-mode"><option value="rifle">Rifle</option><option value="pistol">Pistol</option><option value="shotgun">Shotgun</option></select></label>
+          <label class="mini"><span>Sight height</span><select id="cmp-a-sight"></select></label>
+        </div>
+        <div class="mini">
+          <label for="cmp-a-caliber" id="cmp-a-caliber-label">Caliber or load</label>
+          <span class="search">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+            <input id="cmp-a-search" type="search" placeholder="Search calibers and loads" aria-label="Search calibers and loads for A" autocomplete="off" spellcheck="false">
+          </span>
+          <select id="cmp-a-caliber"></select>
+          <span class="hint" id="cmp-a-count"></span>
+        </div>
+        <div class="load-form-row">
+          <label class="mini"><span>Bullet weight</span><select id="cmp-a-weight"></select></label>
+          <label class="mini"><span>Bullet shape</span><select id="cmp-a-shape"></select></label>
+        </div>
+        <div class="load-form-row">
+          <label class="mini"><span>Velocity</span><span class="input-unit"><input id="cmp-a-vel" type="number" inputmode="decimal" min="100" max="6000" step="any"><span class="cmp-vunit">fps</span></span></label>
+          <label class="mini"><span>G1 B.C.</span><input id="cmp-a-bc" type="number" inputmode="decimal" min="0.01" max="2" step="0.001"></label>
+        </div>
+        <p class="hint cmp-typical"><span id="cmp-a-vnote"></span> <button type="button" class="link" id="cmp-a-typical" hidden>Use typical</button></p>
+      </section>
+      <section class="card cmp-side" data-side="b" aria-labelledby="cmp-b-title">
+        <div class="cmp-side-head">
+          <h2 id="cmp-b-title"><span class="side-badge side-b" aria-hidden="true">B</span><span class="visually-hidden">Load B: </span><span id="cmp-b-name">–</span></h2>
+          <label class="cmp-from" id="cmp-b-from-wrap">
+            <span class="visually-hidden">Fill load B from a saved setup</span>
+            <select id="cmp-b-from"></select>
+          </label>
+        </div>
+        <div class="load-form-row">
+          <label class="mini"><span>Firearm</span><select id="cmp-b-mode"><option value="rifle">Rifle</option><option value="pistol">Pistol</option><option value="shotgun">Shotgun</option></select></label>
+          <label class="mini"><span>Sight height</span><select id="cmp-b-sight"></select></label>
+        </div>
+        <div class="mini">
+          <label for="cmp-b-caliber" id="cmp-b-caliber-label">Caliber or load</label>
+          <span class="search">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+            <input id="cmp-b-search" type="search" placeholder="Search calibers and loads" aria-label="Search calibers and loads for B" autocomplete="off" spellcheck="false">
+          </span>
+          <select id="cmp-b-caliber"></select>
+          <span class="hint" id="cmp-b-count"></span>
+        </div>
+        <div class="load-form-row">
+          <label class="mini"><span>Bullet weight</span><select id="cmp-b-weight"></select></label>
+          <label class="mini"><span>Bullet shape</span><select id="cmp-b-shape"></select></label>
+        </div>
+        <div class="load-form-row">
+          <label class="mini"><span>Velocity</span><span class="input-unit"><input id="cmp-b-vel" type="number" inputmode="decimal" min="100" max="6000" step="any"><span class="cmp-vunit">fps</span></span></label>
+          <label class="mini"><span>G1 B.C.</span><input id="cmp-b-bc" type="number" inputmode="decimal" min="0.01" max="2" step="0.001"></label>
+        </div>
+        <p class="hint cmp-typical"><span id="cmp-b-vnote"></span> <button type="button" class="link" id="cmp-b-typical" hidden>Use typical</button></p>
+      </section>
+    </div>
+
+    <section class="card cmp-shared" aria-label="Zero and range">
+      <div class="cmp-shared-row">
+        <label class="mini"><span id="cmp-zero-label">Zero range</span><select id="cmp-zero"></select></label>
+        <label class="mini" id="cmp-zero-b-wrap" hidden><span>B’s zero range</span><select id="cmp-zero-b"></select></label>
+        <label class="mini"><span>Compare out to</span><select id="cmp-max"></select></label>
+      </div>
+      <label class="check"><input type="checkbox" id="cmp-split"> Give B its own zero</label>
+      <p class="hint" id="cmp-cond"></p>
+    </section>
+
+    <div id="cmp-error" class="alert" role="alert" hidden></div>
+
+    <div id="cmp-results">
+      <section class="card">
+        <h2>Side by side</h2>
+        <div class="table-wrap"><table class="data cmp-sum" id="cmp-summary"></table></div>
+        <p class="hint" id="cmp-sum-note"></p>
+      </section>
+
+      <section class="card">
+        <div class="chart-head">
+          <h2>Downrange</h2>
+          <div class="segmented" role="group" aria-label="Chart shows">
+            <button type="button" data-cmp-chart="path" aria-pressed="true">Path</button>
+            <button type="button" data-cmp-chart="velocity" aria-pressed="false">Velocity</button>
+            <button type="button" data-cmp-chart="energy" aria-pressed="false">Energy</button>
+          </div>
+        </div>
+        <div class="legend">
+          <span><i class="sw path"></i><span id="cmp-key-a">A</span></span>
+          <span><i class="sw cmp"></i><span id="cmp-key-b">B</span></span>
+        </div>
+        <div id="cmp-chart" class="chart"></div>
+      </section>
+
+      <section class="card">
+        <div class="chart-head">
+          <h2>By range</h2>
+          <div class="segmented" role="group" aria-label="Table shows">
+            <button type="button" data-cmp-table="trajectory" aria-pressed="true">Trajectory</button>
+            <button type="button" data-cmp-table="impact" aria-pressed="false">Impact</button>
+          </div>
+        </div>
+        <div class="table-wrap"><table class="data cmp-table" id="cmp-table"></table></div>
+        <p class="hint" id="cmp-table-note"></p>
+      </section>
     </div>
   </main>
 

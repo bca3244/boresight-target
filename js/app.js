@@ -16,7 +16,7 @@
     savedName: $('saved-name'), savedSave: $('saved-save'), savedNote: $('saved-note'), savedCount: $('saved-count'),
     savedExport: $('saved-export'), savedImport: $('saved-import'), savedFile: $('saved-file'),
     trajTable: $('traj-table'), trajNote: $('traj-note'), wind: $('wind'), windUnit: $('wind-unit'),
-    windClock: $('wind-clock'), slope: $('slope'), compareKey: $('compare-key'), compareName: $('compare-name'), compareNote: $('compare-note'), tMax: $('t-max'), tStep: $('t-step'), trajHint: $('traj-hint'), printCard: $('print-card'),
+    windClock: $('wind-clock'), slope: $('slope'), tMax: $('t-max'), tStep: $('t-step'), trajHint: $('traj-hint'), printCard: $('print-card'),
     cardClick: $('card-click'), cardHint: $('card-hint'), cardPreview: $('card-preview'),
     pbrZone: $('pbr-zone'), pbrUnit: $('pbr-unit'), pbrUse: $('pbr-use'), pbrHint: $('pbr-hint'),
     cRange: $('c-range'), cClick: $('c-click'), cVert: $('c-vert'), cVdir: $('c-vdir'), cHoriz: $('c-horiz'), cHdir: $('c-hdir'),
@@ -87,7 +87,6 @@
     table: tablePrefs(),    // trajectory table extent per firearm: { max, step } in the displayed distance unit
     loads: [],           // my loads (every firearm type), see normLoad(); read from storage below, once their limits exist
     linkLoad: null,      // a load opened from a link that isn't in my loads
-    compare: false,      // true while comparing with B (see the Compare section). Not kept or shared.
     result: null
   };
   const metric = () => state.units === 'metric';
@@ -135,9 +134,9 @@
   }
   state.loads = readLoads() || [];
   const sameLoad = (a, b) => a.mode === b.mode && a.name === b.name && a.grains === b.grains && a.fps === b.fps && a.bc === b.bc;
-  function modeLoads() {
-    const list = state.loads.filter(l => l.mode === state.mode);
-    if (state.linkLoad && state.linkLoad.mode === state.mode) list.push(state.linkLoad);
+  function modeLoads(mode = state.mode) {
+    const list = state.loads.filter(l => l.mode === mode);
+    if (state.linkLoad && state.linkLoad.mode === mode) list.push(state.linkLoad);
     return list;
   }
   function currentLoad() {
@@ -149,8 +148,8 @@
     return load ? load.name : BTS.calibers(state.mode)[idx(el.caliber)];
   }
   // Weight label in the units the weight list uses: grains (or grams), ounces for shotgun slugs.
-  function loadWeightLabel(grains) {
-    if (state.mode === 'shotgun') return metric() ? (grains / 437.5 * 28.349518).toFixed(1) + ' g' : (grains / 437.5).toFixed(3) + ' oz';
+  function loadWeightLabel(grains, mode = state.mode) {
+    if (mode === 'shotgun') return metric() ? (grains / 437.5 * 28.349518).toFixed(1) + ' g' : (grains / 437.5).toFixed(3) + ' oz';
     return metric() ? (grains * 0.06479891).toFixed(2) + ' g' : +grains.toFixed(1) + ' gr';
   }
 
@@ -172,9 +171,9 @@
   // Your loads come first, in their own group.
   // Calibers are listed by name, numbers in numeric order ("30-06" before "300", "6.5" before "6mm"); their values stay data positions.
   const CALIBER_ORDER = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
-  // Fills a caliber select (the setup's or B's) and its match count; used by both lists.
-  function fillCaliberSelect(select, count, keepIndex, term) {
-    const names = BTS.calibers(state.mode), loads = modeLoads();
+  // Fills a caliber select (the setup's or a Compare side's) and its match count.
+  function fillCaliberSelect(select, count, keepIndex, term, mode = state.mode) {
+    const names = BTS.calibers(mode), loads = modeLoads(mode);
     const all = loads.map((l, k) => ({ value: LOAD_BASE + k, name: l.name + (l === state.linkLoad ? ' (from link)' : ''), mine: true }))
       .concat(names.map((name, i) => ({ value: i, name })).sort((a, b) => CALIBER_ORDER.compare(a.name, b.name)));
     const words = term.toLowerCase().split(/\s+/).filter(Boolean);
@@ -183,7 +182,7 @@
     if (!shown.length) shown = [all.find(o => !o.mine)];
     select.innerHTML = '';
     const group = label => { const g = document.createElement('optgroup'); g.label = label; return g; };
-    const groups = loads.length ? { mine: group('My loads'), list: group(state.mode === 'shotgun' ? 'Gauges' : 'Calibers') } : null;
+    const groups = loads.length ? { mine: group('My loads'), list: group(mode === 'shotgun' ? 'Gauges' : 'Calibers') } : null;
     shown.forEach(it => {
       const o = document.createElement('option');
       o.value = String(it.value);
@@ -399,7 +398,6 @@
         const nz = BTS.nearZero(state.vFps, state.bc, sightIn, sol.angle, zeroYd);
         r.nearZero = nz == null ? null : (metric() ? nz * BTS.METERS_PER_YARD : nz);
         r.table = trajectoryRows(sol.angle, sightIn, zero, zeroYd);
-        addCompare(r);
       }
     }
     state.result = r;
@@ -466,31 +464,25 @@
     return side ? `${windDisplay()} ${u.w} from ${state.windClock} o'clock` : 'no crosswind';
   }
   // The page shows the wind in the controls above the table, so its header only names the direction.
-  // `b` (page only): the comparison, which adds its bullet path and drift after the drift columns.
-  function trajectoryHead(u, withWind, b) {
+  function trajectoryHead(u, withWind) {
     const side = driftSide(), label = withWind ? `Drift${side ? ' ' + side : ''}, ${windText(u)}` : (side ? 'Drift ' + side : 'Drift (no crosswind)');
-    const bName = b ? (b.label.length > 26 ? b.label.slice(0, 25) + '…' : b.label) : '';
-    return `<tr><th></th><th class="grp sep" colspan="3">Bullet vs. sight line</th><th class="grp sep" colspan="3">${label}</th>` +
-      (b ? `<th class="grp sep cmp" colspan="2" title="${esc(b.label)}">B: ${esc(bName)}</th>` : '') + `<th class="sep" colspan="3"></th></tr>` +
+    return `<tr><th></th><th class="grp sep" colspan="3">Bullet vs. sight line</th><th class="grp sep" colspan="3">${label}</th>` + `<th class="sep" colspan="3"></th></tr>` +
       `<tr><th>Range (${u.d})</th><th class="sep">${u.h}</th><th>MOA</th><th>mil</th><th class="sep">${u.h}</th><th>MOA</th><th>mil</th>` +
-      (b ? `<th class="sep cmp">Path ${u.h}</th><th class="cmp">Drift ${u.h}</th>` : '') +
       `<th class="sep">Velocity (${u.v})</th><th>Energy (${u.e})</th><th>Time (s)</th></tr>`;
   }
-  function trajectoryCells(row, pathClass, b) {
+  function trajectoryCells(row, pathClass) {
     return `<td class="sep${pathClass}">${signed(row.path, 2)}</td><td>${signed(row.pathMoa, 1)}</td><td>${signed(row.pathMil, 2)}</td>` +
       `<td class="sep">${row.drift.toFixed(2)}</td><td>${row.driftMoa.toFixed(1)}</td><td>${row.driftMil.toFixed(2)}</td>` +
-      (b ? `<td class="sep cmp">${signed(row.b.path, 2)}</td><td class="cmp">${row.b.drift.toFixed(2)}</td>` : '') +
       `<td class="sep">${Math.round(row.velocity)}</td><td>${Math.round(row.energy)}</td><td>${row.time.toFixed(3)}</td>`;
   }
 
   function renderTable() {
-    const r = state.result, u = trajectoryUnits(), b = r.b && !r.b.error ? r.b : null;
-    let h = `<thead>${trajectoryHead(u, false, b)}</thead><tbody>`;
+    const r = state.result, u = trajectoryUnits();
+    let h = `<thead>${trajectoryHead(u, false)}</thead><tbody>`;
     r.table.forEach(row => {
       const cls = row.path > 0.005 ? ' up' : row.path < -0.005 ? ' down' : '';
-      h += `<tr${row.zero ? ' class="zero-row"' : ''}><td>${row.range}${row.zero ? ' <span class="tag">zero</span>' : ''}</td>${trajectoryCells(row, cls, b)}</tr>`;
+      h += `<tr${row.zero ? ' class="zero-row"' : ''}><td>${row.range}${row.zero ? ' <span class="tag">zero</span>' : ''}</td>${trajectoryCells(row, cls)}</tr>`;
     });
-    showCompare();
     el.trajTable.innerHTML = h + '</tbody>';
     el.trajNote.textContent = (r.nearZero != null ? `Near zero ${r.nearZero.toFixed(1)} ${u.d} · ` : '') + `Max rise ${riseText(r.rise)}` + (state.slopeDeg ? ' (level ground)' : '');
     el.trajHint.textContent = (state.tableCut ? `Showing the first ${TABLE_ROWS} ranges; choose a longer step to see farther. ` : '') +
@@ -627,7 +619,6 @@
   // ---------- Rendering ----------
 
   function render(keepTarget) {
-    syncCompare();
     const r = compute();
     showLoadTools();
     const ok = !r.error;
@@ -642,7 +633,7 @@
     // The calculator's shot distance follows the zero range until the user types their own.
     if (!el.cRange.dataset.edited) el.cRange.value = String(r.zero);
     updateClicks();
-    if (!ok) { el.chart.innerHTML = ''; el.compareKey.hidden = el.compareNote.hidden = true; syncUrl(); renderField(); return; }
+    if (!ok) { el.chart.innerHTML = ''; syncUrl(); renderField(); renderCompare(); return; }
     buildTargets(keepTarget);
     el.meet.textContent = r.meet.toFixed(1);
     el.meetUnit.textContent = metric() ? 'm' : 'yd';
@@ -651,6 +642,7 @@
     renderTable();
     renderTarget();
     renderField();
+    renderCompare();
   }
 
   function renderTarget() {
@@ -789,8 +781,7 @@
     return (n < 1.5 ? 1 : n < 3 ? 2 : n < 7 ? 5 : 10) * mag;
   }
 
-  // `withB` (the page chart only): also the comparison's bullet path.
-  function chartData(withB) {
+  function chartData() {
     const r = state.result, t = currentTarget();
     const toDisp = metric() ? BTS.METERS_PER_YARD : 1;      // yards -> display distance
     const yScale = metric() ? BTS.CM_PER_INCH : 1;          // inches -> display height
@@ -799,10 +790,8 @@
       : r.zeroYd * 1.12;
     const pts = BTS.trajectory(r.vFps, r.bc, r.sightIn, r.angle, xMaxYd, xMaxYd / 240)
       .map(p => ({ x: p.x * toDisp, y: p.y * yScale }));
-    const b = withB && r.b && !r.b.error ? r.b : null;
-    const ptsB = b ? BTS.trajectory(b.vFps, b.bc, b.sightIn, b.angle, xMaxYd, xMaxYd / 240).map(p => ({ x: p.x * toDisp, y: p.y * yScale })) : null;
     const h = r.sightIn * yScale, meet = r.meet;
-    return { pts, ptsB, h, meet, rise: r.rise, xMax: xMaxYd * toDisp, target: t, yScale,
+    return { pts, h, meet, rise: r.rise, xMax: xMaxYd * toDisp, target: t, yScale,
       laserAt: x => -h + h * x / meet,
       xUnit: metric() ? 'm' : 'yd', yUnit: metric() ? 'cm' : 'in' };
   }
@@ -814,7 +803,7 @@
     const m = { l: Math.round(fs * 4.3), r: 18, t: 18, b: Math.round(fs * 3.3) };
     const iw = w - m.l - m.r, ih = h - m.t - m.b;
     const riseShown = d.rise && d.rise.y > 0.005 && d.rise.x <= d.xMax;
-    const all = d.ptsB ? d.pts.concat(d.ptsB) : d.pts;
+    const all = d.pts;
     let yMin = Math.min(-d.h, ...all.map(p => p.y)), yMax = Math.max(d.laserAt(d.xMax), ...all.map(p => p.y), 0);
     const pad = (yMax - yMin) * 0.08 || 0.1;
     yMin -= pad; yMax += pad;
@@ -836,10 +825,6 @@
     const path = d.pts.map((p, i) => (i ? 'L' : 'M') + X(p.x).toFixed(1) + ' ' + Y(p.y).toFixed(1)).join('');
     s += `<line x1="${X(0)}" y1="${Y(0)}" x2="${X(d.xMax)}" y2="${Y(0)}" stroke="${colors.los}" stroke-width="2.25"/>`;
     s += `<path d="${path}" fill="none" stroke="${colors.path}" stroke-width="2.25" stroke-linejoin="round"/>`;
-    if (d.ptsB) {
-      const pathB = d.ptsB.map((p, i) => (i ? 'L' : 'M') + X(p.x).toFixed(1) + ' ' + Y(p.y).toFixed(1)).join('');
-      s += `<path class="cmp-path" d="${pathB}" fill="none" stroke="${colors.compare}" stroke-width="2.25" stroke-dasharray="7 5" stroke-linejoin="round"/>`;
-    }
     s += `<line x1="${X(0)}" y1="${Y(-d.h)}" x2="${X(d.xMax)}" y2="${Y(d.laserAt(d.xMax))}" stroke="${colors.laser}" stroke-width="2.25"/>`;
 
     if (!d.target.meet && d.target.range <= d.xMax) {
@@ -873,7 +858,7 @@
 
   function drawChart() {
     const w = Math.max(280, el.chart.clientWidth), h = Math.max(220, el.chart.clientHeight);
-    const d = chartData(true);
+    const d = chartData();
     const c = chartSVG(d, w, h, screenColors(), true);
     el.chart.innerHTML = c.svg + '<div class="tooltip" hidden></div>';
     const svg = el.chart.querySelector('svg'), tip = el.chart.querySelector('.tooltip'), hover = svg.querySelector('.hover-line');
@@ -892,8 +877,7 @@
       tip.hidden = false;
       tip.style.left = (c.X(x) / w * box.width) + 'px';
       tip.style.top = ((e.clientY - box.top)) + 'px';
-      tip.innerHTML = `<b>${x.toFixed(1)} ${d.xUnit}</b><br><span class="t-path">Bullet ${pathAt(x).toFixed(2)} ${d.yUnit}</span><br><span class="t-laser">Laser ${d.laserAt(x).toFixed(2)} ${d.yUnit}</span>` +
-        (d.ptsB ? `<br><span class="t-cmp">B ${pathAt(x, d.ptsB).toFixed(2)} ${d.yUnit}</span>` : '');
+      tip.innerHTML = `<b>${x.toFixed(1)} ${d.xUnit}</b><br><span class="t-path">Bullet ${pathAt(x).toFixed(2)} ${d.yUnit}</span><br><span class="t-laser">Laser ${d.laserAt(x).toFixed(2)} ${d.yUnit}</span>`;
     });
     hit.addEventListener('pointerleave', () => { tip.hidden = true; hover.setAttribute('visibility', 'hidden'); });
   }
@@ -1278,139 +1262,12 @@
     toast(`Zero set to ${state.result.zero} ${metric() ? 'm' : 'yd'}`);
   });
 
-  // ---------- Compare: a second caliber or load (B), as a dashed line on the chart and two table columns ----------
-  // B has its own caliber (or one of my loads), weight, shape and zero, and uses the current sight height and barrel.
-  // Everything else on the page (targets, range card, clicks, point-blank range, printouts) keeps using the current setup.
-  const cmp = {
-    open: $('cmp-open'), stop: $('cmp-stop'), form: $('cmp-form'),
-    caliber: $('cmp-caliber'), search: $('cmp-search'), count: $('cmp-count'),
-    weight: $('cmp-weight'), shape: $('cmp-shape'), zero: $('cmp-zero'),
-    lists: {}
-  };
-  const cmpLoad = () => { const v = idx(cmp.caliber); return v >= LOAD_BASE ? modeLoads()[v - LOAD_BASE] || null : null; };
-  const cmpName = () => { const l = cmpLoad(); return l ? l.name : BTS.calibers(state.mode)[idx(cmp.caliber)]; };
-
-  // Fills B's lists, keeping B's caliber (by name), weight, shape and zero when they still exist; otherwise the current setup's.
-  function buildCompare(keep) {
-    const names = BTS.calibers(state.mode), loads = modeLoads();
-    let pick = names.indexOf(keep.name);
-    if (pick < 0) { const k = loads.findIndex(l => l.name === keep.name); if (k >= 0) pick = LOAD_BASE + k; }
-    if (pick < 0) pick = idx(el.caliber);
-    $('cmp-caliber-label').textContent = state.mode === 'shotgun' ? 'Gauge or load' : 'Caliber or load';
-    // Like the setup's list, the search is for rifles and pistols (a shotgun has only a few gauges).
-    cmp.search.parentElement.hidden = state.mode === 'shotgun';
-    if (state.mode === 'shotgun') cmp.search.value = '';
-    fillCaliberSelect(cmp.caliber, cmp.count, pick, cmp.search.value);
-    const load = cmpLoad(), ci = idx(cmp.caliber);
-    // A search that leaves out B's caliber picks the first match, which starts on its own typical weight.
-    if (ci !== pick) keep = Object.assign({}, keep, { grains: null });
-    if (load) {
-      cmp.lists.weights = [{ label: loadWeightLabel(load.grains), grains: load.grains }];
-      cmp.lists.shapes = [{ label: LOAD_SHAPE, index: -1 }];
-    } else {
-      cmp.lists.weights = BTS.weights(state.mode, ci, metric());
-      cmp.lists.shapes = BTS.shapes(state.mode, ci);
-    }
-    let grains = load ? load.grains : keep.grains;
-    if (grains == null) grains = startGrains(ci);
-    fill(cmp.weight, cmp.lists.weights, w => w.label, nearestIndex(cmp.lists.weights, grains, w => w.grains));
-    fill(cmp.shape, cmp.lists.shapes, x => x.label, startShape(cmp.lists.shapes, keep.shape));
-    cmp.weight.disabled = cmp.shape.disabled = !!load;
-    cmp.lists.zeros = state.lists.zeros;
-    const z = cmp.lists.zeros.indexOf(keep.zero);
-    fill(cmp.zero, cmp.lists.zeros, v => v + (metric() ? ' m' : ' yd'), z < 0 ? idx(el.zero) : z);
-  }
-  // What B is now, to keep it through a rebuild (or the current setup's values when B is new).
-  function compareKeep(fromSetup) {
-    const s = fromSetup ? el : cmp, lists = fromSetup ? state.lists : cmp.lists;
-    const w = lists.weights[idx(s.weight)], sh = lists.shapes[idx(s.shape)];
-    return { name: fromSetup ? caliberName() : cmpName(), grains: w && w.grains, shape: sh && sh.label, zero: lists.zeros[idx(s.zero)] };
-  }
-  // B's lists depend on the firearm, units and my loads, so they're rebuilt with every render while comparing.
-  function syncCompare() { if (state.compare) buildCompare(compareKeep(false)); }
-  function openCompare() {
-    cmp.search.value = '';
-    buildCompare(compareKeep(true));
-    state.compare = true;
-    cmp.form.hidden = false;
-    cmp.open.hidden = true;
-    if (state.result && !state.result.error) { refreshTable(); drawChart(); }
-    cmp.caliber.focus();
-  }
-  function closeCompare() {
-    state.compare = false;
-    cmp.form.hidden = true;
-    cmp.open.hidden = false;
-  }
-
-  // B for result r: its velocity and B.C. (the current setup's when it's the same caliber, weight and shape),
-  // the current sight height, and its zero.
-  function compareSpec(r) {
-    const load = cmpLoad(), ci = idx(cmp.caliber), w = cmp.lists.weights[idx(cmp.weight)], s = cmp.lists.shapes[idx(cmp.shape)];
-    const zero = cmp.lists.zeros[idx(cmp.zero)];
-    if (!w || !s || zero == null) return null;
-    const sameLoadAsSetup = cmp.caliber.value === el.caliber.value && w.grains === state.lists.weights[idx(el.weight)].grains &&
-      s.label === state.lists.shapes[idx(el.shape)].label;
-    let vFps, bc;
-    if (sameLoadAsSetup) { vFps = r.vFps; bc = r.bc; }
-    else if (load) { vFps = Math.max(100, load.fps + barrelAdjustFps()); bc = load.bc; }
-    else { vFps = Math.max(100, BTS.typicalVelocityFps(state.mode, ci, w) + barrelAdjustFps()); bc = BTS.typicalBc(state.mode, ci, w, s.index); }
-    const unit = metric() ? 'm' : 'yd';
-    const what = sameLoadAsSetup ? 'This load' : load ? load.name : cmpName().split(' (')[0] + ' ' + w.label;
-    const label = what + (sameLoadAsSetup || zero !== r.zero ? `, ${zero} ${unit} zero` : '');
-    return { label, same: sameLoadAsSetup && zero === r.zero, vFps, bc, sightIn: r.sightIn, zeroYd: metric() ? zero / BTS.METERS_PER_YARD : zero };
-  }
-  function addCompare(r) {
-    const b = state.compare ? compareSpec(r) : null;
-    r.b = b;
-    if (!b) return;
-    const sol = BTS.solve(b.vFps, b.bc, b.sightIn, b.zeroYd);
-    if (sol.rising || !isFinite(sol.meetYd) || sol.meetYd <= 0) { b.error = true; return; }
-    b.angle = sol.angle;
-    const windMph = state.windMph * windFactor(), k = metric() ? BTS.CM_PER_INCH : 1;
-    BTS.trajectoryTable(b.vFps, b.bc, b.sightIn, b.angle, r.table.map(row => row.rangeYd), state.slopeDeg).forEach((p, i) => {
-      const row = r.table[i];
-      row.b = { path: p.y * k, drift: BTS.windDriftIn(windMph, row.rangeYd, p.t, b.vFps) * k };
-    });
-  }
-
-  // Legend entry and the one-line summary under the chart: how B differs at the farthest range in the table.
-  function showCompare() {
-    const r = state.result, b = r && r.b;
-    el.compareKey.hidden = !b || !!b.error;
-    el.compareNote.hidden = !b;
-    if (!b) return;
-    el.compareName.textContent = 'B: ' + b.label;
-    const u = trajectoryUnits();
-    if (b.same) { el.compareNote.textContent = 'B is the same as your setup for now: change its caliber, weight, shape or zero under Compare with in Setup.'; return; }
-    if (b.error) { el.compareNote.textContent = `B (${b.label}) can’t be zeroed this close: the bullet is still rising there.`; return; }
-    const last = r.table[r.table.length - 1], dy = last.b.path - last.path, dd = last.b.drift - last.drift;
-    const amount = v => Math.abs(v).toFixed(1) + ' ' + u.h;
-    const height = Math.abs(dy) < 0.05 ? 'hits at the same height as your setup' : `hits ${amount(dy)} ${dy > 0 ? 'higher' : 'lower'} than your setup`;
-    const drift = !driftSide() ? '' : Math.abs(dd) < 0.05 ? ' and drifts about the same' : ` and drifts ${amount(dd)} ${dd > 0 ? 'more' : 'less'}`;
-    el.compareNote.textContent = `At ${last.range} ${u.d}, B ${height}${drift}${state.slopeDeg ? ' (at your shot angle; the chart shows level ground)' : ''}.`;
-  }
-
-  cmp.open.addEventListener('click', openCompare);
-  cmp.stop.addEventListener('click', () => {
-    closeCompare();
-    if (state.result && !state.result.error) { refreshTable(); drawChart(); }
-  });
-  const compareChanged = () => { syncCompare(); if (state.result && !state.result.error) { refreshTable(); drawChart(); } };
-  cmp.caliber.addEventListener('change', () => { const k = compareKeep(false); k.grains = null; k.name = cmpName(); buildCompare(k); compareChanged(); });
-  [cmp.weight, cmp.shape, cmp.zero].forEach(s => s.addEventListener('change', compareChanged));
-  // Searching narrows B's list the same way as the setup's (the term is used on every rebuild until it's cleared).
-  cmp.search.addEventListener('input', compareChanged);
-  cmp.search.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && cmp.search.value) { cmp.search.value = ''; compareChanged(); e.stopPropagation(); }
-    if (e.key === 'Enter') { e.preventDefault(); cmp.caliber.focus(); }
-  });
-
   // Rebuilds only the trajectory table (wind and table settings don't change the boresight solution).
   function refreshTable() {
     const r = state.result;
-    if (r && !r.error) { r.table = trajectoryRows(r.angle, r.sightIn, r.zero, r.zeroYd); addCompare(r); renderTable(); }
+    if (r && !r.error) { r.table = trajectoryRows(r.angle, r.sightIn, r.zero, r.zeroYd); renderTable(); }
     renderField();
+    renderCompare();
   }
 
   el.barrelOn.addEventListener('change', () => {
@@ -1606,6 +1463,7 @@
     el.savedCount.textContent = has ? String(list.length) : '';
     if (!available) el.savedNote.textContent = 'This browser is blocking site storage, so setups can’t be saved here. Copy link still works.';
     fillFieldSaved();
+    fillCompareFrom();
   }
   function suggestedName() {
     return caliberName() + ' · ' + state.lists.weights[idx(el.weight)].label + ' · ' +
@@ -1844,7 +1702,7 @@
   const FIELD_STEP = { rifle: 10, pistol: 5, shotgun: 5 };
   const FIELD_MAX_YD = 2000;
   const SOUND_FPS = 1116, TRANSONIC_FPS = 1340;   // speed of sound at 59 °F, and about Mach 1.2
-  state.view = loadPref('view', 'setup') === 'field' ? 'field' : 'setup';
+  state.view = ['field', 'compare'].includes(loadPref('view', 'setup')) ? loadPref('view', 'setup') : 'setup';
   state.theme = ['sun', 'night'].includes(loadPref('theme', 'dark')) ? loadPref('theme', 'dark') : 'dark';
 
   const toDispDist = yd => (metric() ? yd * BTS.METERS_PER_YARD : yd);
@@ -2021,10 +1879,13 @@
     state.view = view;
     if (save) savePref('view', view);
     setPressed('[data-view]', 'data-view', view);
-    fe.setup.hidden = view === 'field';
+    fe.setup.hidden = view !== 'setup';
     fe.view.hidden = view !== 'field';
+    cmpEl.view.hidden = view !== 'compare';
     document.body.classList.toggle('in-field', view === 'field');
+    document.body.classList.toggle('in-compare', view === 'compare');
     if (view === 'field') { fillFieldSaved(); renderField(); }
+    else if (view === 'compare') { fillCompareFrom(); renderCompare(); }
     else if (state.result && !state.result.error) drawChart();   // drawn while hidden, the chart had no size
     syncWake();
     window.scrollTo(0, 0);
@@ -2042,9 +1903,402 @@
     document.querySelector('meta[name="color-scheme"]').content = theme === 'sun' ? 'light' : 'dark';
     document.querySelector('meta[name="theme-color"]').content = THEME_BG[theme];
     if (state.result && !state.result.error && state.view === 'setup') drawChart();
+    if (save && state.view === 'compare') renderCompare();   // the Compare section isn't set up yet on the first call
   }
   document.querySelectorAll('[data-theme-pick]').forEach(b => b.addEventListener('click', () => setTheme(b.dataset.themePick)));
   setTheme(state.theme, false);
+
+  // ---------- Compare: two loads side by side (trajectory and impact ballistics) ----------
+  // Each side has its own firearm, caliber (or one of my loads), weight, shape, velocity, B.C. and sight height, and can be
+  // filled from the current Setup or a saved setup. Both share one zero unless B gets its own. Wind and the vital zone are
+  // the same preferences Setup and Field use; the comparison is on level ground. Nothing here changes Setup.
+  const CMP_ZEROS = [25, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300];
+  const CMP_MAX = [50, 100, 150, 200, 300, 400, 500, 600, 800, 1000];
+  const CMP_FAR_YD = 2000;   // how far the energy cutoffs and supersonic range are looked for
+  const GAME_ENERGY = [{ name: 'deer', ftlb: 1000 }, { name: 'elk', ftlb: 1500 }, { name: 'moose', ftlb: 2000 }];
+  const CMP_B_START = { rifle: '6.5mm Creedmoor', pistol: '45 ACP', shotgun: '20 gauge slug barrel' };
+  const cmpEl = { view: $('compare-view'), zero: $('cmp-zero'), zeroB: $('cmp-zero-b'), zeroBWrap: $('cmp-zero-b-wrap'), split: $('cmp-split'), max: $('cmp-max'),
+    cond: $('cmp-cond'), error: $('cmp-error'), results: $('cmp-results'), summary: $('cmp-summary'), sumNote: $('cmp-sum-note'),
+    chart: $('cmp-chart'), keyA: $('cmp-key-a'), keyB: $('cmp-key-b'), table: $('cmp-table'), tableNote: $('cmp-table-note') };
+  const sides = ['a', 'b'].map(k => ({
+    key: k, K: k.toUpperCase(), lists: {},
+    name: $(`cmp-${k}-name`), from: $(`cmp-${k}-from`), mode: $(`cmp-${k}-mode`), sight: $(`cmp-${k}-sight`),
+    caliberLabel: $(`cmp-${k}-caliber-label`), search: $(`cmp-${k}-search`), caliber: $(`cmp-${k}-caliber`), count: $(`cmp-${k}-count`),
+    weight: $(`cmp-${k}-weight`), shape: $(`cmp-${k}-shape`), vel: $(`cmp-${k}-vel`), bc: $(`cmp-${k}-bc`),
+    vnote: $(`cmp-${k}-vnote`), typical: $(`cmp-${k}-typical`)
+  }));
+
+  // What each side is, kept as a per-viewer preference: { mode, name, grains, shape, vFps, bc, custom, sightIn }.
+  let cmp = null;
+  function cmpSave() { savePref('compare', JSON.stringify(cmp)); }
+  function cmpLoadState() {
+    try { const v = JSON.parse(loadPref('compare', 'null')); if (v && v.a && v.b) return v; } catch (e) { /* ignore */ }
+    return null;
+  }
+  // A side as Setup has it now, or as a saved setup's link describes it (null if it can't be read).
+  function profileFromCode(code) {
+    const m0 = ('#' + code).match(SHARE_RE);
+    if (!m0) return null;
+    const version = m0[1], m = m0.slice(1), n = s => parseInt(s, 36);
+    const flags = n(m[1]), mode = BTS.MODES[flags >> 3], met = !!(flags & 4);
+    if (!mode) return null;
+    const sights = BTS.sightHeights(mode, met), sg = sights[Math.min(n(m[3]), sights.length - 1)];
+    const out = { mode, sightIn: sg.inches, custom: false };
+    if (m[13]) {
+      const linked = normLoad({ name: decodeName(m[16]) || 'Load from link', mode, grains: n(m[13]) / 10, fps: n(m[14]), bc: n(m[15]) / 1000 });
+      const saved = linked && modeLoads(mode).find(l => sameLoad(l, linked));
+      if (!saved) return null;
+      Object.assign(out, { name: saved.name, grains: saved.grains, shape: LOAD_SHAPE, vFps: saved.fps, bc: saved.bc });
+    } else {
+      const names = BTS.calibers(mode), ci = n(m[2]);
+      if (ci >= names.length) return null;
+      let w;
+      if (version === '1') {
+        const old = BTS.v1Weights(mode, ci, met)[n(m[4])], list = BTS.weights(mode, ci, met);
+        w = old ? list[nearestIndex(list, old.grains, x => x.grains)] : null;
+      } else { const list = BTS.weights(mode, ci, met); w = list[Math.min(n(m[4]), list.length - 1)]; }
+      const shapes = BTS.shapes(mode, ci), sh = shapes[Math.min(n(m[5]), shapes.length - 1)];
+      if (!w || !sh) return null;
+      Object.assign(out, { name: names[ci], grains: w.grains, shape: sh.label, vFps: BTS.typicalVelocityFps(mode, ci, w), bc: BTS.typicalBc(mode, ci, w, sh.index) });
+    }
+    if (m[8]) {
+      const v = n(m[8]);
+      Object.assign(out, { vFps: met ? v * FPS_PER_MPS : v, bc: n(m[9]) / 1000, custom: true });
+    } else if (m[10] && mode !== 'shotgun') {
+      const adj = Math.round((n(m[10]) / 10 - (n(m[11]) / 10 || BARREL_REF_IN[mode])) * n(m[12]));
+      if (adj) Object.assign(out, { vFps: Math.max(100, out.vFps + adj), custom: true });
+    }
+    return out;
+  }
+  function cmpInit() {
+    cmp = cmpLoadState();
+    if (cmp) return;
+    const a = profileFromCode(shareCode()) || { mode: 'rifle', name: DEFAULTS.rifle.caliber, sightIn: 1.5 };
+    const b = { mode: a.mode, name: CMP_B_START[a.mode], sightIn: a.sightIn };
+    const zeroYd = state.result ? state.result.zeroYd : DEFAULTS[a.mode].zero;
+    cmp = { a, b, zeroYd, zeroBYd: zeroYd, split: false, maxYd: a.mode === 'rifle' ? 500 : 100, chart: 'path', table: 'trajectory' };
+  }
+
+  // Rebuilds one side's lists from its kept values (typical velocity and B.C. unless they were typed or came with the profile).
+  function buildSide(sd) {
+    const st = cmp[sd.key], mode = BTS.MODES.includes(st.mode) ? st.mode : 'rifle';
+    st.mode = mode;
+    sd.mode.value = mode;
+    const names = BTS.calibers(mode), loads = modeLoads(mode);
+    let pick = names.indexOf(st.name);
+    if (pick < 0) { const k = loads.findIndex(l => l.name === st.name); if (k >= 0) pick = LOAD_BASE + k; }
+    if (pick < 0) pick = Math.max(0, names.indexOf(DEFAULTS[mode].caliber));
+    sd.caliberLabel.textContent = mode === 'shotgun' ? 'Gauge or load' : 'Caliber or load';
+    sd.search.parentElement.hidden = mode === 'shotgun';
+    if (mode === 'shotgun') sd.search.value = '';
+    fillCaliberSelect(sd.caliber, sd.count, pick, sd.search.value, mode);
+    const v = idx(sd.caliber), load = v >= LOAD_BASE ? loads[v - LOAD_BASE] || null : null, ci = load ? -1 : v;
+    const picked = load ? load.name : names[ci];
+    if (picked !== st.name) { st.name = picked; st.grains = null; st.custom = false; }
+    sd.lists.load = load;
+    sd.lists.ci = ci;
+    if (load) {
+      sd.lists.weights = [{ label: loadWeightLabel(load.grains, mode), grains: load.grains }];
+      sd.lists.shapes = [{ label: LOAD_SHAPE, index: -1 }];
+    } else {
+      sd.lists.weights = BTS.weights(mode, ci, metric());
+      sd.lists.shapes = BTS.shapes(mode, ci);
+    }
+    fill(sd.weight, sd.lists.weights, w => w.label, nearestIndex(sd.lists.weights, st.grains == null ? (load ? load.grains : startGrainsFor(mode, ci)) : st.grains, w => w.grains));
+    fill(sd.shape, sd.lists.shapes, s => s.label, startShape(sd.lists.shapes, st.shape));
+    sd.weight.disabled = sd.shape.disabled = !!load;
+    st.grains = sd.lists.weights[idx(sd.weight)].grains;
+    st.shape = sd.lists.shapes[idx(sd.shape)].label;
+    sd.lists.sights = BTS.sightHeights(mode, metric());
+    fill(sd.sight, sd.lists.sights, s => s.label, nearestIndex(sd.lists.sights, st.sightIn == null ? DEFAULTS[mode].sightIn : st.sightIn, s => s.inches));
+    st.sightIn = sd.lists.sights[idx(sd.sight)].inches;
+    const w = sd.lists.weights[idx(sd.weight)], s = sd.lists.shapes[idx(sd.shape)];
+    sd.lists.typicalFps = load ? load.fps : BTS.typicalVelocityFps(mode, ci, w);
+    sd.lists.typicalBc = load ? load.bc : BTS.typicalBc(mode, ci, w, s.index);
+    if (!st.custom || !(st.vFps > 0) || !(st.bc > 0)) { st.vFps = sd.lists.typicalFps; st.bc = sd.lists.typicalBc; st.custom = false; }
+    if (document.activeElement !== sd.vel) sd.vel.value = String(metric() ? BTS.roundHalfEven(st.vFps / FPS_PER_MPS) : BTS.roundHalfEven(st.vFps));
+    if (document.activeElement !== sd.bc) sd.bc.value = st.bc.toFixed(3);
+    sd.vel.parentElement.querySelector('.cmp-vunit').textContent = metric() ? 'm/s' : 'fps';
+    sd.vnote.textContent = st.custom ? 'Your velocity and B.C.' : load ? 'From your load.' : 'Typical velocity and B.C.';
+    sd.typical.hidden = !st.custom;
+    sd.name.textContent = cmpLabel(sd);
+  }
+  function startGrainsFor(mode, ci) {
+    if (mode === 'shotgun') return BTS.GAUGES[ci].eighths[0] === 5 ? 437.5 : 0.75 * 437.5;
+    const row = BTS_DATA[mode][ci];
+    return row[7] || (row[2] + row[3]) / 2;
+  }
+  function cmpLabel(sd) {
+    const st = cmp[sd.key];
+    return sd.lists.load ? st.name : `${st.name.split(' (')[0]} ${sd.lists.weights[idx(sd.weight)].label}`;
+  }
+  function cmpDiameter(sd) {
+    const st = cmp[sd.key], ci = sd.lists.ci;
+    if (ci < 0) return null;
+    return st.mode === 'shotgun' ? BTS.GAUGES[ci].diameter : BTS_DATA[st.mode][ci][1];
+  }
+
+  function fillCompareFrom() {
+    const list = (readSaved() || []).slice().sort((a, b) => a.name.localeCompare(b.name));
+    // Looked up here (not through `sides`) because the saved list is first drawn before this section runs.
+    document.querySelectorAll('.cmp-from select').forEach(sel => {
+      sel.innerHTML = '<option value="">Fill from…</option><option value="#setup">Current Setup</option>' +
+        list.map(s => `<option value="${esc(s.name)}">${esc(s.name)}</option>`).join('');
+    });
+  }
+
+  function fillShared() {
+    const u = metric() ? 'm' : 'yd', toD = yd => toDispDist(yd);
+    const near = (list, yd) => nearestIndex(list, toD(yd), x => x);
+    fill(cmpEl.zero, CMP_ZEROS, z => z + ' ' + u, near(CMP_ZEROS, cmp.zeroYd));
+    fill(cmpEl.zeroB, CMP_ZEROS, z => z + ' ' + u, near(CMP_ZEROS, cmp.zeroBYd));
+    fill(cmpEl.max, CMP_MAX, z => z + ' ' + u, near(CMP_MAX, cmp.maxYd));
+    cmpEl.split.checked = !!cmp.split;
+    cmpEl.zeroBWrap.hidden = !cmp.split;
+    $('cmp-zero-label').textContent = cmp.split ? 'A’s zero range' : 'Zero range';
+    setPressed('[data-cmp-chart]', 'data-cmp-chart', cmp.chart);
+    setPressed('[data-cmp-table]', 'data-cmp-table', cmp.table);
+  }
+
+  // One side's solution: bore angle for its zero, plus a fine sweep for the energy cutoffs and supersonic range.
+  function sideResult(sd, zeroYd) {
+    const st = cmp[sd.key], grains = st.grains, dia = cmpDiameter(sd);
+    const out = { label: cmpLabel(sd), vFps: st.vFps, bc: st.bc, sightIn: st.sightIn, grains, dia, zeroYd };
+    const sol = BTS.solve(st.vFps, st.bc, st.sightIn, zeroYd);
+    if (sol.rising || !isFinite(sol.meetYd) || sol.meetYd <= 0) { out.error = true; return out; }
+    out.angle = sol.angle;
+    const step = 5, far = [];
+    for (let r = step; r <= CMP_FAR_YD; r += step) far.push(r);
+    const pts = BTS.trajectoryTable(st.vFps, st.bc, st.sightIn, sol.angle, far, 0);
+    const crossing = (valueAt, level) => {
+      let prevV = valueAt(st.vFps), prevR = 0;
+      if (prevV < level) return 0;
+      for (let i = 0; i < pts.length; i++) {
+        const v = valueAt(pts[i].v);
+        if (v < level) return prevR + (prevV - level) / (prevV - v) * (far[i] - prevR);
+        prevV = v; prevR = far[i];
+      }
+      return null;   // still above at CMP_FAR_YD
+    };
+    out.supersonicYd = st.vFps < BTS.ATMOSPHERE.soundFps ? 0 : crossing(v => v, BTS.ATMOSPHERE.soundFps);
+    out.cutoffs = GAME_ENERGY.map(g => crossing(v => BTS.energyFtLb(grains, v), g.ftlb));
+    const half = state.vitalIn / 2;
+    out.pbr = BTS.pointBlankAt(st.vFps, st.bc, st.sightIn, sol.angle, half, PBR_MAX_YD);
+    out.pbr.over = out.pbr.apexIn > half + 0.005;
+    out.best = BTS.pointBlank(st.vFps, st.bc, st.sightIn, half, PBR_MAX_YD);
+    return out;
+  }
+
+  const momentum = (gr, fps) => gr / 7000 * fps;               // lb·ft/s
+  const taylorKo = (gr, fps, dia) => gr * fps * dia / 7000;
+  const sectional = (gr, dia) => gr / 7000 / (dia * dia);
+
+  function renderCompare() {
+    if (state.view !== 'compare') return;
+    if (!cmp) cmpInit();
+    fillShared();
+    sides.forEach(buildSide);
+    cmpSave();
+    const u = trajectoryUnits(), A = sideResult(sides[0], cmp.zeroYd), B = sideResult(sides[1], cmp.split ? cmp.zeroBYd : cmp.zeroYd);
+    cmpEl.cond.textContent = `Wind ${windText(u)}, a ${len1(state.vitalIn)} vital zone for point-blank range, level ground. ` +
+      'Wind and vital zone are the ones set in Setup and Field.';
+    const bad = [A, B].filter(r => r.error);
+    cmpEl.error.hidden = !bad.length;
+    cmpEl.error.textContent = bad.map(r => `${r === A ? 'A' : 'B'} (${r.label}) can’t be zeroed at ${Math.round(toDispDist(r.zeroYd))} ${u.d}: the bullet is still rising there.`).join(' ') +
+      (bad.length ? ' Choose a longer zero.' : '');
+    cmpEl.results.hidden = !!bad.length;
+    if (bad.length) return;
+    cmpEl.keyA.textContent = 'A: ' + A.label;
+    cmpEl.keyB.textContent = 'B: ' + B.label;
+    renderCmpSummary(A, B, u);
+    renderCmpTable(A, B, u);
+    drawCmpChart(A, B, u);
+  }
+  function len1(inch) { return metric() ? (inch * BTS.CM_PER_INCH).toFixed(1).replace(/\.0$/, '') + ' cm' : (+inch.toFixed(1)) + ' in'; }
+
+  function renderCmpSummary(A, B, u) {
+    const dist = yd => Math.round(toDispDist(yd)).toLocaleString() + ' ' + u.d;
+    const vel = fps => (metric() ? Math.round(fps * 0.3048) : Math.round(fps)).toLocaleString() + ' ' + u.v;
+    const en = ftlb => Math.round(metric() ? ftlb * 1.35582 : ftlb).toLocaleString() + ' ' + u.e;
+    const mom = (gr, fps) => metric() ? (gr * 0.06479891 / 1000 * fps * 0.3048).toFixed(1) + ' kg·m/s' : momentum(gr, fps).toFixed(1) + ' lb·ft/s';
+    const reach = yd => yd == null ? 'past ' + dist(CMP_FAR_YD) : yd === 0 ? 'never' : dist(yd);
+    const reachN = yd => yd == null ? Infinity : yd;
+    const pbrText = r => r.pbr.over ? `none (rises ${len1(r.pbr.apexIn)})` : (r.pbr.endYd == null ? `${dist(r.pbr.startYd)} to past ${dist(PBR_MAX_YD)}` : `${Math.round(toDispDist(r.pbr.startYd))}–${dist(r.pbr.endYd)}`);
+    const rows = [];
+    const row = (label, a, b, better, aN, bN, sub) => rows.push({ label, a, b, better, aN, bN, sub });
+    const grp = label => rows.push({ grp: label });
+    grp('Bullet');
+    row('Weight', loadWeightLabel(A.grains, cmp.a.mode), loadWeightLabel(B.grains, cmp.b.mode));
+    row('Diameter', A.dia ? (metric() ? (A.dia * 25.4).toFixed(2) + ' mm' : A.dia.toFixed(3) + ' in') : '–', B.dia ? (metric() ? (B.dia * 25.4).toFixed(2) + ' mm' : B.dia.toFixed(3) + ' in') : '–');
+    row('Sectional density', A.dia ? sectional(A.grains, A.dia).toFixed(3) : '–', B.dia ? sectional(B.grains, B.dia).toFixed(3) : '–', 'high',
+      A.dia ? sectional(A.grains, A.dia) : null, B.dia ? sectional(B.grains, B.dia) : null, 'Weight for its diameter; a rough guide to penetration');
+    row('G1 B.C.', A.bc.toFixed(3), B.bc.toFixed(3), 'high', A.bc, B.bc, 'Higher holds velocity and bucks wind better');
+    grp('At the muzzle');
+    row('Velocity', vel(A.vFps), vel(B.vFps), 'high', A.vFps, B.vFps);
+    row('Energy', en(BTS.energyFtLb(A.grains, A.vFps)), en(BTS.energyFtLb(B.grains, B.vFps)), 'high', BTS.energyFtLb(A.grains, A.vFps), BTS.energyFtLb(B.grains, B.vFps));
+    row('Momentum', mom(A.grains, A.vFps), mom(B.grains, B.vFps), 'high', momentum(A.grains, A.vFps), momentum(B.grains, B.vFps));
+    row('Taylor KO factor', A.dia ? taylorKo(A.grains, A.vFps, A.dia).toFixed(1) : '–', B.dia ? taylorKo(B.grains, B.vFps, B.dia).toFixed(1) : '–', 'high',
+      A.dia ? taylorKo(A.grains, A.vFps, A.dia) : null, B.dia ? taylorKo(B.grains, B.vFps, B.dia) : null, 'Weight × velocity × diameter ÷ 7000');
+    grp('Reach');
+    const zA = Math.round(toDispDist(A.zeroYd)), zB = Math.round(toDispDist(B.zeroYd));
+    row(`Point-blank range, ${len1(state.vitalIn)} zone`, pbrText(A) + (cmp.split ? ` (${zA} ${u.d} zero)` : ''), pbrText(B) + (cmp.split ? ` (${zB} ${u.d} zero)` : ''), 'high',
+      A.pbr.over ? 0 : reachN(A.pbr.endYd), B.pbr.over ? 0 : reachN(B.pbr.endYd), cmp.split ? 'With each zero' : `With the ${zA} ${u.d} zero`);
+    row('Longest point-blank range', `${reach(A.best.endYd)}<span class="sub">zero at ${A.best.farZeroYd ? dist(A.best.farZeroYd) : '–'}</span>`,
+      `${reach(B.best.endYd)}<span class="sub">zero at ${B.best.farZeroYd ? dist(B.best.farZeroYd) : '–'}</span>`, 'high', reachN(A.best.endYd), reachN(B.best.endYd), 'With the best zero for this zone');
+    row('Supersonic to', reach(A.supersonicYd), reach(B.supersonicYd), 'high', reachN(A.supersonicYd), reachN(B.supersonicYd), `Above ${vel(BTS.ATMOSPHERE.soundFps)}, the speed of sound at 59 °F`);
+    GAME_ENERGY.forEach((g, i) => row(`${en(g.ftlb)}+ (${g.name}) to`, reach(A.cutoffs[i]), reach(B.cutoffs[i]), 'high', reachN(A.cutoffs[i]), reachN(B.cutoffs[i])));
+    let h = `<thead><tr><th></th><th class="side-a-h" title="${esc(A.label)}">A: ${esc(A.label)}</th><th class="side-b-h" title="${esc(B.label)}">B: ${esc(B.label)}</th></tr></thead><tbody>`;
+    rows.forEach(r => {
+      if (r.grp) { h += `<tr class="grp"><th colspan="3">${r.grp}</th></tr>`; return; }
+      let wa = false, wb = false;
+      if (r.better && r.aN != null && r.bN != null && r.aN !== r.bN) {
+        const big = Math.max(Math.abs(r.aN), Math.abs(r.bN));
+        if (!isFinite(big) || Math.abs(r.aN - r.bN) / big > 0.005) { wa = r.aN > r.bN; wb = !wa; }
+      }
+      // The ▲ goes right after the value, before any small line under it.
+      const mark = (v, win) => !win ? v : v.includes('<span class="sub">') ? v.replace('<span class="sub">', '<span class="mk" aria-label="higher"> ▲</span><span class="sub">') : v + '<span class="mk" aria-label="higher"> ▲</span>';
+      h += `<tr><th scope="row">${esc(r.label)}${r.sub ? `<span class="sub">${esc(r.sub)}</span>` : ''}</th><td${wa ? ' class="win"' : ''}>${mark(r.a, wa)}</td><td${wb ? ' class="win"' : ''}>${mark(r.b, wb)}</td></tr>`;
+    });
+    cmpEl.summary.innerHTML = h + '</tbody>';
+    cmpEl.sumNote.textContent = '▲ marks the higher value. Energy figures for game are common rules of thumb, not a guarantee: shot placement and bullet construction matter more.' +
+      (A.dia && B.dia ? '' : ' Sectional density and Taylor KO need a caliber; a load of your own doesn’t say its diameter.');
+  }
+
+  // Rows every tenth of the chosen distance, in display units.
+  function cmpRanges() {
+    const maxD = Math.round(toDispDist(cmp.maxYd)), step = maxD / 10, out = [];
+    for (let i = 0; i <= 10; i++) out.push(Math.round(i * step * 10) / 10);
+    return out;
+  }
+  function sideRows(r, rangesD) {
+    const windMph = state.windMph * windFactor(), k = metric() ? BTS.CM_PER_INCH : 1;
+    const yds = rangesD.map(d => Math.max(0.01, fromDispDist(d)));
+    return BTS.trajectoryTable(r.vFps, r.bc, r.sightIn, r.angle, yds, 0).map((p, i) => ({
+      range: rangesD[i], path: i === 0 ? -r.sightIn * k : p.y * k, drift: i === 0 ? 0 : BTS.windDriftIn(windMph, yds[i], p.t, r.vFps) * k,
+      time: i === 0 ? 0 : p.t, v: i === 0 ? r.vFps : p.v
+    }));
+  }
+  function renderCmpTable(A, B, u) {
+    const ranges = cmpRanges(), ra = sideRows(A, ranges), rb = sideRows(B, ranges), side = driftSide();
+    const vel = fps => Math.round(metric() ? fps * 0.3048 : fps).toLocaleString();
+    const en = (gr, fps) => Math.round(metric() ? BTS.energyFtLb(gr, fps) * 1.35582 : BTS.energyFtLb(gr, fps)).toLocaleString();
+    const mom = (gr, fps) => (metric() ? gr * 0.06479891 / 1000 * fps * 0.3048 : momentum(gr, fps)).toFixed(1);
+    const tko = (r, fps) => r.dia ? taylorKo(r.grains, fps, r.dia).toFixed(1) : '–';
+    const cols = cmp.table === 'impact'
+      ? [[`Velocity (${u.v})`, (r, x) => vel(x.v)], [`Energy (${u.e})`, (r, x) => en(r.grains, x.v)],
+         [`Momentum (${metric() ? 'kg·m/s' : 'lb·ft/s'})`, (r, x) => mom(r.grains, x.v)], ['Taylor KO', (r, x) => tko(r, x.v)]]
+      : [[`Path (${u.h})`, (r, x) => signed(x.path, 1)], [`Drift${side ? ' ' + side : ''} (${u.h})`, (r, x) => x.drift.toFixed(1)], ['Time (s)', (r, x) => x.time.toFixed(3)]];
+    let h = `<thead><tr><th></th>${cols.map(c => `<th class="grp sep" colspan="2">${c[0]}</th>`).join('')}</tr>` +
+      `<tr><th>Range (${u.d})</th>${cols.map(() => '<th class="sep side-a-h">A</th><th class="side-b-h">B</th>').join('')}</tr></thead><tbody>`;
+    ranges.forEach((d, i) => {
+      h += `<tr><td>${d}</td>${cols.map(c => `<td class="sep">${c[1](A, ra[i])}</td><td class="cmp">${c[1](B, rb[i])}</td>`).join('')}</tr>`;
+    });
+    cmpEl.table.innerHTML = h + '</tbody>';
+    cmpEl.tableNote.textContent = cmp.table === 'impact'
+      ? 'Momentum and Taylor KO favor heavy, wide bullets; energy favors speed. None of them measures how a bullet expands.'
+      : `Path is from the line of sight with ${cmp.split ? 'each side’s own zero' : 'the shared zero'}. Drift is for ${windText(u)}.`;
+  }
+
+  function drawCmpChart(A, B, u) {
+    const w = Math.max(280, cmpEl.chart.clientWidth), h = Math.max(220, cmpEl.chart.clientHeight);
+    const maxD = toDispDist(cmp.maxYd), n = 120, xs = [];
+    for (let i = 0; i <= n; i++) xs.push(maxD * i / n);
+    const ra = sideRows(A, xs), rb = sideRows(B, xs);
+    const pick = {
+      path: { y: x => x.path, unit: u.h, title: `Path (${u.h})` },
+      velocity: { y: x => metric() ? x.v * 0.3048 : x.v, unit: u.v, title: `Velocity (${u.v})` },
+      energy: { y: (x, r) => metric() ? BTS.energyFtLb(r.grains, x.v) * 1.35582 : BTS.energyFtLb(r.grains, x.v), unit: u.e, title: `Energy (${u.e})` }
+    }[cmp.chart];
+    const ya = ra.map(x => pick.y(x, A)), yb = rb.map(x => pick.y(x, B));
+    const colors = screenColors(), fs = w >= 700 ? 15 : 14;
+    const m = { l: Math.round(fs * 4.3), r: 18, t: 18, b: Math.round(fs * 3.3) }, iw = w - m.l - m.r, ih = h - m.t - m.b;
+    let yMin = Math.min(...ya, ...yb), yMax = Math.max(...ya, ...yb);
+    if (cmp.chart === 'path') { yMin = Math.min(yMin, 0); yMax = Math.max(yMax, 0); } else yMin = 0;
+    const pad = (yMax - yMin) * 0.08 || 1;
+    yMax += pad; if (cmp.chart === 'path') yMin -= pad;
+    const ys = niceStep(yMax - yMin, 7), xst = niceStep(maxD, 9);
+    yMin = Math.floor(yMin / ys) * ys; yMax = Math.ceil(yMax / ys) * ys;
+    const X = x => m.l + x / maxD * iw, Y = y => m.t + (yMax - y) / (yMax - yMin) * ih;
+    const dec = v => (Math.abs(v) < 1e-9 ? '0' : Math.abs(ys) >= 1 ? Math.round(v).toLocaleString() : v.toFixed(ys < 0.1 ? 2 : 1));
+    let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" font-family="Segoe UI, Arial, sans-serif" role="img" aria-label="${esc(pick.title)} for A and B">`;
+    for (let x = 0; x <= maxD + 1e-9; x += xst) s += `<line x1="${X(x)}" y1="${m.t}" x2="${X(x)}" y2="${m.t + ih}" stroke="${colors.grid}"/>`;
+    for (let y = yMin; y <= yMax + 1e-9; y += ys) s += `<line x1="${m.l}" y1="${Y(y)}" x2="${m.l + iw}" y2="${Y(y)}" stroke="${colors.grid}"/>`;
+    s += `<g fill="${colors.tick}" font-size="${fs}">`;
+    for (let x = 0; x <= maxD + 1e-9; x += xst) s += `<text x="${X(x)}" y="${m.t + ih + fs * 1.45}" text-anchor="middle">${+x.toFixed(1)}</text>`;
+    for (let y = yMin; y <= yMax + 1e-9; y += ys) s += `<text x="${m.l - 10}" y="${Y(y) + fs * 0.35}" text-anchor="end">${dec(y)}</text>`;
+    s += `<text x="${m.l + iw / 2}" y="${h - 6}" text-anchor="middle" fill="${colors.title}" font-weight="600">Range (${u.d})</text>`;
+    s += `<text transform="translate(${fs} ${m.t + ih / 2}) rotate(-90)" text-anchor="middle" fill="${colors.title}" font-weight="600">${esc(pick.title)}</text></g>`;
+    if (cmp.chart === 'path') s += `<line x1="${X(0)}" y1="${Y(0)}" x2="${X(maxD)}" y2="${Y(0)}" stroke="${colors.los}" stroke-width="2"/>`;
+    const line = ys2 => ys2.map((y, i) => (i ? 'L' : 'M') + X(xs[i]).toFixed(1) + ' ' + Y(y).toFixed(1)).join('');
+    s += `<path d="${line(ya)}" fill="none" stroke="${colors.path}" stroke-width="2.5" stroke-linejoin="round"/>`;
+    s += `<path class="cmp-path" d="${line(yb)}" fill="none" stroke="${colors.compare}" stroke-width="2.5" stroke-dasharray="7 5" stroke-linejoin="round"/>`;
+    s += `<line class="hover-line" x1="0" y1="${m.t}" x2="0" y2="${m.t + ih}" stroke="${colors.axis}" visibility="hidden"/><rect class="hit" x="${m.l}" y="${m.t}" width="${iw}" height="${ih}" fill="transparent"/></svg>`;
+    cmpEl.chart.innerHTML = s + '<div class="tooltip" hidden></div>';
+    const svg = cmpEl.chart.querySelector('svg'), tip = cmpEl.chart.querySelector('.tooltip'), hover = svg.querySelector('.hover-line');
+    const fmt = v => cmp.chart === 'path' ? signed(v, 1) : Math.round(v).toLocaleString();
+    svg.querySelector('.hit').addEventListener('pointermove', e => {
+      const box = svg.getBoundingClientRect(), px = (e.clientX - box.left) * (w / box.width);
+      const i = Math.max(0, Math.min(n, Math.round((px - m.l) / iw * n)));
+      hover.setAttribute('x1', X(xs[i])); hover.setAttribute('x2', X(xs[i])); hover.setAttribute('visibility', 'visible');
+      tip.hidden = false;
+      tip.style.left = (X(xs[i]) / w * box.width) + 'px';
+      tip.style.top = (e.clientY - box.top) + 'px';
+      tip.innerHTML = `<b>${xs[i].toFixed(0)} ${u.d}</b><br><span class="t-a">A ${fmt(ya[i])} ${pick.unit}</span><br><span class="t-cmp">B ${fmt(yb[i])} ${pick.unit}</span>`;
+    });
+    svg.querySelector('.hit').addEventListener('pointerleave', () => { tip.hidden = true; hover.setAttribute('visibility', 'hidden'); });
+  }
+
+  // Wiring: every change updates the kept state and re-renders.
+  sides.forEach(sd => {
+    const st = () => cmp[sd.key];
+    sd.from.addEventListener('change', () => {
+      const v = sd.from.value;
+      sd.from.value = '';
+      const saved = v === '#setup' ? null : (readSaved() || []).find(x => x.name === v);
+      const p = profileFromCode(v === '#setup' ? shareCode() : saved ? saved.code : '');
+      if (!p) { toast('That setup uses a load that’s no longer in My loads'); return; }
+      sd.search.value = '';
+      cmp[sd.key] = p;
+      renderCompare();
+      toast(`${sd.K} filled from ${v === '#setup' ? 'Setup' : '“' + v + '”'}`);
+    });
+    sd.mode.addEventListener('change', () => {
+      sd.search.value = '';
+      cmp[sd.key] = { mode: sd.mode.value, name: sd.key === 'b' ? CMP_B_START[sd.mode.value] : DEFAULTS[sd.mode.value].caliber, sightIn: DEFAULTS[sd.mode.value].sightIn };
+      renderCompare();
+    });
+    sd.caliber.addEventListener('change', () => {
+      const v = idx(sd.caliber), loads = modeLoads(st().mode);
+      Object.assign(st(), { name: v >= LOAD_BASE ? loads[v - LOAD_BASE].name : BTS.calibers(st().mode)[v], grains: null, custom: false });
+      renderCompare();
+    });
+    sd.search.addEventListener('input', renderCompare);
+    sd.search.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && sd.search.value) { sd.search.value = ''; renderCompare(); e.stopPropagation(); }
+      if (e.key === 'Enter') { e.preventDefault(); sd.caliber.focus(); }
+    });
+    sd.weight.addEventListener('change', () => { Object.assign(st(), { grains: sd.lists.weights[idx(sd.weight)].grains, custom: false }); renderCompare(); });
+    sd.shape.addEventListener('change', () => { Object.assign(st(), { shape: sd.lists.shapes[idx(sd.shape)].label, custom: false }); renderCompare(); });
+    sd.sight.addEventListener('change', () => { st().sightIn = sd.lists.sights[idx(sd.sight)].inches; renderCompare(); });
+    sd.vel.addEventListener('input', () => {
+      const v = parseFloat(sd.vel.value), fps = metric() ? v * FPS_PER_MPS : v;
+      if (fps >= LOAD_LIMITS.fps[0] && fps <= LOAD_LIMITS.fps[1]) { Object.assign(st(), { vFps: fps, custom: true }); renderCompare(); }
+    });
+    sd.bc.addEventListener('input', () => {
+      const v = parseFloat(sd.bc.value);
+      if (v >= LOAD_LIMITS.bc[0] && v <= LOAD_LIMITS.bc[1]) { Object.assign(st(), { bc: v, custom: true }); renderCompare(); }
+    });
+    [sd.vel, sd.bc].forEach(i => i.addEventListener('blur', renderCompare));
+    sd.typical.addEventListener('click', () => { st().custom = false; renderCompare(); });
+  });
+  cmpEl.zero.addEventListener('change', () => { cmp.zeroYd = fromDispDist(CMP_ZEROS[idx(cmpEl.zero)]); if (!cmp.split) cmp.zeroBYd = cmp.zeroYd; renderCompare(); });
+  cmpEl.zeroB.addEventListener('change', () => { cmp.zeroBYd = fromDispDist(CMP_ZEROS[idx(cmpEl.zeroB)]); renderCompare(); });
+  cmpEl.split.addEventListener('change', () => { cmp.split = cmpEl.split.checked; if (!cmp.split) cmp.zeroBYd = cmp.zeroYd; renderCompare(); });
+  cmpEl.max.addEventListener('change', () => { cmp.maxYd = fromDispDist(CMP_MAX[idx(cmpEl.max)]); renderCompare(); });
+  document.querySelectorAll('[data-cmp-chart]').forEach(b => b.addEventListener('click', () => { cmp.chart = b.dataset.cmpChart; renderCompare(); }));
+  document.querySelectorAll('[data-cmp-table]').forEach(b => b.addEventListener('click', () => { cmp.table = b.dataset.cmpTable; renderCompare(); }));
+  let cmpResize = 0;
+  window.addEventListener('resize', () => { clearTimeout(cmpResize); cmpResize = setTimeout(() => { if (state.view === 'compare') renderCompare(); }, 150); });
 
   // ---------- Start ----------
   const startHash = location.hash;

@@ -487,3 +487,38 @@ body.in-field .foot, body.in-field .paper { display: none; }
   .f-cond-row { grid-template-columns: minmax(0, 1fr); }
 }
 @media print { .view-tabs { display: none !important; } }
+
+/* ---------- Compare ---------- */
+.compare-view { display: grid; gap: 16px; max-width: 1180px; margin: 0 auto; }
+.compare-view[hidden], #cmp-results[hidden] { display: none; }
+#cmp-results { display: grid; gap: 16px; }
+.cmp-sides { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.cmp-side { display: grid; gap: 12px; align-content: start; }
+.cmp-side-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.cmp-side-head h2 { display: flex; align-items: center; gap: 10px; min-width: 0; font-size: 17px; }
+.cmp-side-head h2 > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-badge { flex: none; display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; font-size: 14px; font-weight: 800; color: var(--bg); }
+.side-a { background: var(--path); }
+.side-b { background: var(--compare); }
+.cmp-from { flex: 0 1 200px; min-width: 150px; }
+.cmp-from select { height: 36px; font-size: 14px; }
+.cmp-side .load-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.cmp-side .search { margin-bottom: 6px; }
+.cmp-typical { min-height: 1.4em; }
+.cmp-typical .link[hidden] { display: none; }
+.cmp-shared { display: grid; gap: 10px; }
+.cmp-shared-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.cmp-shared-row .mini[hidden] { display: none; }
+table.cmp-sum th[scope="row"] { text-align: left; color: var(--muted); font-weight: 500; text-transform: none; letter-spacing: 0; font-size: 14px; }
+table.cmp-sum td, table.cmp-sum th { white-space: normal; }
+table.cmp-sum thead th { font-size: 13px; }
+table.cmp-sum td { width: 34%; }
+table.cmp-sum tr.grp th { text-align: left; padding-top: 16px; color: var(--text); font-size: 12px; }
+table.cmp-sum td.win { color: var(--text); font-weight: 700; }
+table.cmp-sum .mk { color: var(--accent); font-size: 11px; }
+table.cmp-sum .sub { display: block; color: var(--faint); font-size: 12.5px; font-weight: 400; }
+table.data th.side-a-h { color: var(--path); }
+table.data .cmp, table.data th.side-b-h { color: var(--compare); }
+#cmp-chart .tooltip .t-a { color: var(--path); }
+@media (max-width: 860px) { .cmp-sides { grid-template-columns: 1fr; } }
+body.in-compare .paper { display: none; }

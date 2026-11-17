@@ -11,7 +11,7 @@
 </style>
 </head>
 <body>
-<h1>UI tests: caliber search, my setups, click calculator, trajectory table, field mode</h1>
+<h1>UI tests: caliber search, my setups, click calculator, trajectory table, field mode, compare</h1>
 <p id="summary">running…</p>
 <table id="results"><tr><th>#</th><th>Check</th><th>Expected</th><th>Got</th><th>Result</th></tr></table>
 <iframe id="f"></iframe>
@@ -32,7 +32,7 @@ function set(d, id, value, ev = 'input') { const e = d.getElementById(id); e.val
 
 (async () => {
   await load('');
-  try { ['bts.saved', 'bts.loads', 'bts.view', 'bts.theme', 'bts.slope', 'bts.plot', 'bts.windclock', 'bts.table.rifle', 'bts.table.pistol', 'bts.table.shotgun'].forEach(k => frame.contentWindow.localStorage.removeItem(k)); } catch (e) { /* storage blocked */ }
+  try { ['bts.saved', 'bts.loads', 'bts.view', 'bts.theme', 'bts.compare', 'bts.slope', 'bts.plot', 'bts.windclock', 'bts.table.rifle', 'bts.table.pistol', 'bts.table.shotgun'].forEach(k => frame.contentWindow.localStorage.removeItem(k)); } catch (e) { /* storage blocked */ }
   await load('');   // again, so the chart starts from its default view
   const w = frame.contentWindow, d = frame.contentDocument;
   row('Install button stays hidden until the browser offers installing', 'hidden', d.getElementById('install').hidden ? 'hidden' : 'shown', d.getElementById('install').hidden);
@@ -490,90 +490,6 @@ function set(d, id, value, ev = 'input') { const e = d.getElementById(id); e.val
     w.localStorage.removeItem('bts.loads');
   }
 
-  // Compare with (in Setup): B's own caliber or load, weight, shape and zero, as a dashed line and two table columns.
-  await load('');
-  if (storageOk) {
-    let d = frame.contentDocument, w = frame.contentWindow;
-    const $ = id => d.getElementById(id);
-    const shown = id => getComputedStyle($(id)).display !== 'none';
-    const rowAt = range => Array.from($('traj-table').tBodies[0].rows).find(r => parseFloat(r.cells[0].textContent) === range);
-    const num = s => parseFloat(s.replace('−', '-'));
-    const aPath = range => num(rowAt(range).cells[1].textContent);
-    const bPath = range => num(rowAt(range).cells[7].textContent);
-    const optValue = (id, text) => Array.from($(id).options).find(o => o.textContent === text).value;
-    row('Compare is folded away until it’s opened', 'form hidden, 10 columns', `${shown('cmp-form') ? 'form showing' : 'form hidden'}, ${rowAt(300).cells.length} columns`,
-        !shown('cmp-form') && shown('cmp-open') && rowAt(300).cells.length === 10 && !$('chart').querySelector('.cmp-path') && $('compare-key').hidden && $('compare-note').hidden);
-    const hashBefore = w.location.hash;
-    $('cmp-open').click();
-    const leaks = Array.from(d.querySelectorAll('[hidden]')).filter(e => getComputedStyle(e).display !== 'none').map(e => e.id || e.className || e.tagName);
-    row('Opening Compare starts B as the current setup', '308 Win, same numbers, 12 columns', `${sel2(d, 'cmp-caliber').split(' (')[0]}, ${bPath(300) === aPath(300) ? 'same numbers' : bPath(300) + ' vs ' + aPath(300)}, ${rowAt(300).cells.length} columns`,
-        shown('cmp-form') && !shown('cmp-open') && leaks.length === 0 && sel2(d, 'cmp-caliber') === sel2(d, 'caliber') && sel2(d, 'cmp-weight') === sel2(d, 'weight') &&
-        bPath(300) === aPath(300) && rowAt(300).cells.length === 12 && /same as your setup/.test($('compare-note').textContent));
-    row('B’s caliber list has every caliber', $('caliber').options.length + ' calibers', $('cmp-caliber').options.length + ' calibers', $('cmp-caliber').options.length === w.BTS.calibers('rifle').length && $('caliber').options.length === $('cmp-caliber').options.length);
-    // B's own search narrows only B's list, and keeps its term while the setup changes.
-    const setupCount = $('caliber').options.length;
-    set(d, 'cmp-search', '6.5 creed');
-    row('Searching B’s list picks the first match for B', 'B: 6.5mm Creedmoor …, setup still 308', `${$('compare-name').textContent}, setup ${sel2(d, 'caliber').split(' (')[0]}`,
-        /^B: 6\.5mm Creedmoor \d+ gr$/.test($('compare-name').textContent) && /^308 Win/.test(sel2(d, 'caliber')) && $('caliber').options.length === setupCount &&
-        $('cmp-caliber').options.length < setupCount && /match “6\.5 creed”/.test($('cmp-count').textContent));
-    set(d, 'sight', $('sight').value, 'change');
-    row('B’s search is kept when the setup changes', '6.5mm Creedmoor, still filtered', `${sel2(d, 'cmp-caliber')}, ${$('cmp-caliber').options.length} shown`,
-        /^6\.5mm Creedmoor/.test(sel2(d, 'cmp-caliber')) && $('cmp-caliber').options.length < setupCount);
-    set(d, 'cmp-search', 'zzzz');
-    row('No match keeps B’s caliber', '6.5mm Creedmoor, No calibers match', `${sel2(d, 'cmp-caliber')}, ${$('cmp-count').textContent}`,
-        /^6\.5mm Creedmoor/.test(sel2(d, 'cmp-caliber')) && /No calibers match/.test($('cmp-count').textContent));
-    $('cmp-search').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-    row('Escape clears B’s search and keeps its caliber', 'full list, 6.5mm Creedmoor', `${$('cmp-caliber').options.length} shown, ${sel2(d, 'cmp-caliber')}`,
-        $('cmp-search').value === '' && $('cmp-caliber').options.length === setupCount && /^6\.5mm Creedmoor/.test(sel2(d, 'cmp-caliber')) && $('cmp-count').textContent === '');
-    $('cmp-stop').click(); $('cmp-open').click();
-    set(d, 'cmp-zero', optValue('cmp-zero', '200 yd'), 'change');
-    row('B at a 200 yd zero is on the sight line at 200 yd and high at 100', '≈0 at 200, high at 100', `${bPath(200)} at 200, ${bPath(100)} at 100`, Math.abs(bPath(200)) < 0.05 && bPath(100) > 1);
-    row('The table and legend name B', 'B: This load, 200 yd zero', `${$('compare-name').textContent} · ${/B: This load, 200 yd zero/.test($('traj-table').tHead.textContent) ? 'in the table' : 'not in the table'}`,
-        $('compare-name').textContent === 'B: This load, 200 yd zero' && /B: This load, 200 yd zero/.test($('traj-table').tHead.textContent) && !$('compare-key').hidden);
-    row('The chart draws B dashed', 'dashed line', $('chart').querySelector('.cmp-path') ? 'dashed line' : 'none', !!$('chart').querySelector('.cmp-path'));
-    row('The note sums up the difference at the farthest range', 'At 300 yd, B hits … in higher than your setup and drifts about the same.', $('compare-note').textContent,
-        /^At 300 yd, B hits [\d.]+ in higher than your setup and drifts about the same\.$/.test($('compare-note').textContent));
-    row('Comparing doesn’t change the link', hashBefore || 'no code', w.location.hash || 'no code', w.location.hash === hashBefore);
-    set(d, 'cmp-zero', optValue('cmp-zero', '100 yd'), 'change');
-    set(d, 'velocity', '2500');
-    row('The same load as the setup uses your own velocity', 'B = setup at 2500 fps', `${bPath(300)} vs ${aPath(300)}`, bPath(300) === aPath(300) && aPath(300) < -10);
-    $('reset-load').click();
-    // Another caliber: B's numbers match what the setup shows for that caliber.
-    set(d, 'cmp-caliber', optValue('cmp-caliber', '6.5mm Creedmoor'), 'change');
-    const bWeight = sel2(d, 'cmp-weight'), bShape = sel2(d, 'cmp-shape'), b300 = bPath(300), bLabel = $('compare-name').textContent;
-    row('Choosing another caliber gives B its own weights', 'B: 6.5mm Creedmoor …', `${bLabel} (${bShape})`, /^B: 6\.5mm Creedmoor \d+ gr$/.test(bLabel) && bWeight !== '' && !$('cmp-weight').disabled);
-    row('The range card still shows only the current setup', 'no B', /B:/.test($('card-preview').textContent) ? 'B on the card' : 'no B', !/B:/.test($('card-preview').textContent));
-    set(d, 'caliber', optValue('caliber', '6.5mm Creedmoor'), 'change');
-    set(d, 'weight', optValue('weight', bWeight), 'change');
-    set(d, 'shape', optValue('shape', bShape), 'change');
-    row('B matches the setup set to that caliber', b300.toFixed(2), aPath(300).toFixed(2), Math.abs(aPath(300) - b300) < 0.011 && /same as your setup/.test($('compare-note').textContent));
-    set(d, 'slope', '20', 'change');
-    set(d, 'cmp-caliber', optValue('cmp-caliber', '308 Win (7.62x51mm)'), 'change');
-    row('With a shot angle the note says so', '(at your shot angle; …)', $('compare-note').textContent, /\(at your shot angle; the chart shows level ground\)/.test($('compare-note').textContent));
-    set(d, 'slope', '0', 'change');
-    d.querySelector('[data-mode="shotgun"]').click();
-    row('Changing firearm keeps comparing, with that firearm’s list', 'Gauge or load, same as the setup', `${$('cmp-caliber-label').textContent}, ${sel2(d, 'cmp-caliber')}`,
-        $('cmp-caliber-label').textContent === 'Gauge or load' && sel2(d, 'cmp-caliber') === sel2(d, 'caliber') && !$('compare-key').hidden);
-    d.querySelector('[data-mode="rifle"]').click();
-    $('cmp-stop').click();
-    row('Stop comparing folds it away and removes B', 'form hidden, 10 columns', `${shown('cmp-form') ? 'form showing' : 'form hidden'}, ${rowAt(300).cells.length} columns`,
-        !shown('cmp-form') && shown('cmp-open') && rowAt(300).cells.length === 10 && !$('chart').querySelector('.cmp-path') && $('compare-key').hidden && $('compare-note').hidden);
-    // My loads are offered too (and loads saved earlier are listed when the page opens).
-    w.localStorage.setItem('bts.loads', JSON.stringify([{ name: 'Hot load', mode: 'rifle', grains: 150, fps: 3000, bc: 0.4 }]));
-    await load('');
-    d = frame.contentDocument; w = frame.contentWindow;
-    row('Loads saved earlier are listed when the page opens', 'Hot load', Array.from($('caliber').querySelectorAll('optgroup[label="My loads"] option')).map(o => o.textContent).join(', ') || 'none',
-        !!Array.from($('caliber').options).find(o => o.textContent === 'Hot load'));
-    $('cmp-open').click();
-    set(d, 'cmp-search', 'hot');
-    row('B’s search finds my loads', 'Hot load', sel2(d, 'cmp-caliber'), sel2(d, 'cmp-caliber') === 'Hot load');
-    set(d, 'cmp-search', '');
-    set(d, 'cmp-caliber', optValue('cmp-caliber', 'Hot load'), 'change');
-    row('One of my loads can be compared', 'B: Hot load, faster so higher at 300', `${$('compare-name').textContent}, ${bPath(300)} vs ${aPath(300)}`,
-        $('cmp-caliber').querySelector('optgroup[label="My loads"]') && $('compare-name').textContent === 'B: Hot load' && $('cmp-weight').disabled && bPath(300) > aPath(300));
-    w.localStorage.removeItem('bts.loads');
-  }
-
   // Reset: change settings, keep a saved setup and a load, then reset to the plain page.
   await load('');
   if (storageOk) {
@@ -717,6 +633,60 @@ function set(d, id, value, ev = 'input') { const e = d.getElementById(id); e.val
     d.querySelector('[data-theme-pick="dark"]').click();
     row('Dark theme clears the attribute', 'none', d.documentElement.getAttribute('data-theme') || 'none', !d.documentElement.hasAttribute('data-theme'));
     try { ['bts.view', 'bts.field.rifle', 'bts.theme', 'bts.wind', 'bts.click'].forEach(k => frame.contentWindow.localStorage.removeItem(k)); } catch (e) { /* storage blocked */ }
+  }
+
+  // Compare: two loads side by side, independent of Setup.
+  {
+    try { ['bts.view', 'bts.compare', 'bts.wind', 'bts.windclock', 'bts.vital', 'bts.theme'].forEach(k => frame.contentWindow.localStorage.removeItem(k)); } catch (e) { /* storage blocked */ }
+    await load('');
+    let d = frame.contentDocument, w = frame.contentWindow;
+    const $ = id => d.getElementById(id);
+    row('Setup has no compare controls any more', 'none', $('cmp-open') || $('compare-key') ? 'still there' : 'none', !$('cmp-open') && !$('compare-key'));
+    const before = w.BTS_APP.shareCode();
+    d.querySelector('[data-view="compare"]').click();
+    row('Compare tab shows only Compare', 'compare shown', `${$('compare-view').hidden ? 'compare hidden' : 'compare shown'}, setup ${d.querySelector('main.layout').hidden ? 'hidden' : 'shown'}, field ${$('field-view').hidden ? 'hidden' : 'shown'}`,
+        !$('compare-view').hidden && d.querySelector('main.layout').hidden && $('field-view').hidden);
+    row('A starts as the Setup load, B as another caliber', '308 Win 150 gr · 6.5mm Creedmoor …', `${$('cmp-a-name').textContent} · ${$('cmp-b-name').textContent}`,
+        $('cmp-a-name').textContent === '308 Win 150 gr' && /^6\.5mm Creedmoor \d+ gr$/.test($('cmp-b-name').textContent));
+    const cell = (label, col) => { const r = Array.from($('cmp-summary').tBodies[0].rows).find(r => r.cells[0] && r.cells[0].firstChild && r.cells[0].firstChild.textContent === label); return r ? r.cells[col].textContent.replace(' ▲', '') : ''; };
+    const e308 = Math.round(w.BTS.energyFtLb(150, 2790)).toLocaleString() + ' ft-lb';
+    row('Muzzle energy for A', e308, cell('Energy', 1), cell('Energy', 1) === e308);
+    row('Sectional density for A (150 gr .308)', (150 / 7000 / 0.308 / 0.308).toFixed(3), cell('Sectional density', 1), cell('Sectional density', 1) === (150 / 7000 / 0.308 / 0.308).toFixed(3));
+    row('Taylor KO for A', (150 * 2790 * 0.308 / 7000).toFixed(1), cell('Taylor KO factor', 1), cell('Taylor KO factor', 1) === (150 * 2790 * 0.308 / 7000).toFixed(1));
+    row('Momentum for A', (150 / 7000 * 2790).toFixed(1) + ' lb·ft/s', cell('Momentum', 1), cell('Momentum', 1) === (150 / 7000 * 2790).toFixed(1) + ' lb·ft/s');
+    row('Energy cutoffs are listed', '1,000 ft-lb+ (deer) to … yd', cell('1,000 ft-lb+ (deer) to', 1), / yd$/.test(cell('1,000 ft-lb+ (deer) to', 1)));
+    row('The higher value is marked', 'a ▲ in each compared row', String($('cmp-summary').querySelectorAll('.mk').length), $('cmp-summary').querySelectorAll('.mk').length >= 8);
+    const trow = range => Array.from($('cmp-table').tBodies[0].rows).find(r => r.cells[0].textContent === String(range));
+    row('Table runs 0–500 yd in 11 rows', '11 rows, 7 columns', `${$('cmp-table').tBodies[0].rows.length} rows, ${trow(100).cells.length} columns`, $('cmp-table').tBodies[0].rows.length === 11 && trow(100).cells.length === 7);
+    row('Both hit the zero at 100 yd', '0.0 / 0.0', `${trow(100).cells[1].textContent} / ${trow(100).cells[2].textContent}`, trow(100).cells[1].textContent === '0.0' && trow(100).cells[2].textContent === '0.0');
+    d.querySelector('[data-cmp-table="impact"]').click();
+    row('Impact view shows velocity, energy, momentum and Taylor KO', '9 columns', `${trow(100).cells.length} columns`, trow(100).cells.length === 9 && /Taylor KO/.test($('cmp-table').tHead.textContent));
+    d.querySelector('[data-cmp-chart="energy"]').click();
+    row('Chart switches to energy', 'Energy (ft-lb)', $('cmp-chart').querySelector('svg').getAttribute('aria-label'), /^Energy \(ft-lb\)/.test($('cmp-chart').querySelector('svg').getAttribute('aria-label')) && !!$('cmp-chart').querySelector('.cmp-path'));
+    $('cmp-split').click();
+    set(d, 'cmp-zero-b', String(Array.from($('cmp-zero-b').options).findIndex(o => o.textContent === '200 yd')), 'change');
+    d.querySelector('[data-cmp-table="trajectory"]').click();
+    row('B can have its own zero', 'B 0.0 at 200, A not', `${trow(200).cells[2].textContent} vs ${trow(200).cells[1].textContent}`, trow(200).cells[2].textContent === '0.0' && trow(200).cells[1].textContent !== '0.0' && !$('cmp-zero-b-wrap').hidden);
+    set(d, 'cmp-b-vel', '3000');
+    row('Typing B’s velocity makes it yours', 'Your velocity and B.C. · Use typical shown', `${$('cmp-b-vnote').textContent} · ${$('cmp-b-typical').hidden ? 'hidden' : 'Use typical shown'}`, $('cmp-b-vnote').textContent === 'Your velocity and B.C.' && !$('cmp-b-typical').hidden);
+    $('cmp-b-typical').click();
+    row('Use typical puts it back', 'Typical velocity and B.C.', $('cmp-b-vnote').textContent, $('cmp-b-vnote').textContent === 'Typical velocity and B.C.' && $('cmp-b-vel').value !== '3000');
+    set(d, 'cmp-b-from', '#setup', 'change');
+    row('B can be filled from the current Setup', '308 Win 150 gr', $('cmp-b-name').textContent, $('cmp-b-name').textContent === '308 Win 150 gr');
+    set(d, 'cmp-a-mode', 'pistol', 'change');
+    row('A can be a pistol while B stays a rifle', '9mm Luger … · 308 Win 150 gr', `${$('cmp-a-name').textContent} · ${$('cmp-b-name').textContent}`, /^9mm Luger/.test($('cmp-a-name').textContent) && $('cmp-b-name').textContent === '308 Win 150 gr');
+    row('Compare doesn’t change Setup', before, w.BTS_APP.shareCode(), w.BTS_APP.shareCode() === before);
+    const leaks = Array.from(d.querySelectorAll('[hidden]')).filter(e => getComputedStyle(e).display !== 'none').map(e => e.id || e.className || e.tagName);
+    row('In Compare, everything marked hidden is off the screen', 'none showing', leaks.length ? 'showing: ' + leaks.join(', ') : 'none showing', leaks.length === 0);
+    const nameOf = e => (e.labels && e.labels.length && e.labels[0].textContent.trim()) || e.getAttribute('aria-label') || e.getAttribute('title') || (e.tagName === 'BUTTON' && e.textContent.trim()) || '';
+    const unnamed = Array.from(d.querySelectorAll('input, select, textarea, button')).filter(e => e.offsetParent !== null && !nameOf(e)).map(e => e.id || e.tagName);
+    row('In Compare, every visible control has a name', 'none unnamed', unnamed.length ? unnamed.join(', ') : 'none unnamed', !unnamed.length);
+    await load('');
+    d = frame.contentDocument;
+    row('Compare and its loads are remembered', 'compare, 9mm Luger …', `${d.getElementById('compare-view').hidden ? 'not compare' : 'compare'}, ${d.getElementById('cmp-a-name').textContent}`,
+        !d.getElementById('compare-view').hidden && /^9mm Luger/.test(d.getElementById('cmp-a-name').textContent));
+    d.querySelector('[data-view="setup"]').click();
+    try { ['bts.view', 'bts.compare'].forEach(k => frame.contentWindow.localStorage.removeItem(k)); } catch (e) { /* storage blocked */ }
   }
 
   document.getElementById('summary').textContent = `${pass} passed, ${fail} failed`;
