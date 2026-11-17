@@ -172,9 +172,9 @@
   // Calibers are listed by name, numbers in numeric order ("30-06" before "300", "6.5" before "6mm"); their values stay data positions.
   const CALIBER_ORDER = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
   // Fills a caliber select (the setup's or a Compare side's) and its match count.
-  function fillCaliberSelect(select, count, keepIndex, term, mode = state.mode) {
-    const names = BTS.calibers(mode), loads = modeLoads(mode);
-    const all = loads.map((l, k) => ({ value: LOAD_BASE + k, name: l.name + (l === state.linkLoad ? ' (from link)' : ''), mine: true }))
+  function fillCaliberSelect(select, count, keepIndex, term, mode = state.mode, loads = modeLoads(mode)) {
+    const names = BTS.calibers(mode);
+    const all = loads.map((l, k) => ({ value: LOAD_BASE + k, name: l.name + (l === state.linkLoad || l.adhoc ? ' (from link)' : ''), mine: true }))
       .concat(names.map((name, i) => ({ value: i, name })).sort((a, b) => CALIBER_ORDER.compare(a.name, b.name)));
     const words = term.toLowerCase().split(/\s+/).filter(Boolean);
     const matches = all.filter(o => words.every(w => o.name.toLowerCase().includes(w)));
@@ -748,9 +748,12 @@
   }
 
   // Copies the current link; falls back to a hidden text field where the clipboard API isn't allowed.
-  function copyLink() {
-    syncUrl();
-    const url = location.href.split('#')[0] + '#' + shareCode();   // always the full code, even on a clean address
+  // `url` (optional): a link to copy instead of this setup's, e.g. a comparison.
+  function copyLink(url) {
+    if (typeof url !== 'string') {
+      syncUrl();
+      url = location.href.split('#')[0] + '#' + shareCode();   // always the full code, even on a clean address
+    }
     const done = () => toast('Link copied');
     const fallback = () => {
       const t = document.createElement('textarea');
@@ -963,9 +966,9 @@
   }
 
   // QR code of setupUrl() as SVG elements: a white square of side `size` at (x, y), quiet zone included.
-  function qrCode(x, y, size) {
+  function qrCode(x, y, size, url) {
     const q = qrcode(0, 'M');
-    q.addData(setupUrl());
+    q.addData(url || setupUrl());
     q.make();
     const n = q.getModuleCount(), quiet = 4, m = size / (n + 2 * quiet);
     let d = '';
@@ -1141,7 +1144,7 @@
   }
 
   function print(kind) {
-    if (!state.result || state.result.error) return;
+    if (kind === 'compare' ? !cmpLast : !state.result || state.result.error) return;
     const paper = PAPER[state.paper];
     let style = document.getElementById('page-size');
     if (!style) { style = document.createElement('style'); style.id = 'page-size'; document.head.appendChild(style); }
@@ -1149,7 +1152,7 @@
     el.printRoot.innerHTML = SHEETS[kind](paper);
     window.print();
   }
-  const SHEETS = { target: targetSheet, report: reportSheet, sightin: sightinSheet, card: cardSheet };
+  const SHEETS = { target: targetSheet, report: reportSheet, sightin: sightinSheet, card: cardSheet, compare: p => compareSheet(p) };
   window.addEventListener('afterprint', () => { el.printRoot.innerHTML = ''; });
 
   // ---------- Events ----------
@@ -1929,7 +1932,7 @@
   }));
 
   // What each side is, kept as a per-viewer preference: { mode, name, grains, shape, vFps, bc, custom, sightIn }.
-  let cmp = null;
+  let cmp = null, cmpLast = null;   // cmpLast: the last good { A, B } results, for printing
   function cmpSave() { savePref('compare', JSON.stringify(cmp)); }
   function cmpLoadState() {
     try { const v = JSON.parse(loadPref('compare', 'null')); if (v && v.a && v.b) return v; } catch (e) { /* ignore */ }
@@ -1946,8 +1949,9 @@
     const out = { mode, sightIn: sg.inches, custom: false };
     if (m[13]) {
       const linked = normLoad({ name: decodeName(m[16]) || 'Load from link', mode, grains: n(m[13]) / 10, fps: n(m[14]), bc: n(m[15]) / 1000 });
-      const saved = linked && modeLoads(mode).find(l => sameLoad(l, linked));
-      if (!saved) return null;
+      if (!linked) return null;
+      const saved = modeLoads(mode).find(l => sameLoad(l, linked)) || Object.assign(linked, { adhoc: true });
+      if (saved.adhoc) out.adhoc = saved;
       Object.assign(out, { name: saved.name, grains: saved.grains, shape: LOAD_SHAPE, vFps: saved.fps, bc: saved.bc });
     } else {
       const names = BTS.calibers(mode), ci = n(m[2]);
@@ -1979,19 +1983,25 @@
     cmp = { a, b, zeroYd, zeroBYd: zeroYd, split: false, maxYd: a.mode === 'rifle' ? 500 : 100, chart: 'path', table: 'trajectory' };
   }
 
+  // My loads for the side's firearm, plus a load it brought from a link or saved setup that isn't in My loads.
+  function sideLoads(st) {
+    const base = modeLoads(st.mode);
+    return st.adhoc && st.adhoc.mode === st.mode && !base.some(l => sameLoad(l, st.adhoc)) ? base.concat([st.adhoc]) : base;
+  }
+
   // Rebuilds one side's lists from its kept values (typical velocity and B.C. unless they were typed or came with the profile).
   function buildSide(sd) {
     const st = cmp[sd.key], mode = BTS.MODES.includes(st.mode) ? st.mode : 'rifle';
     st.mode = mode;
     sd.mode.value = mode;
-    const names = BTS.calibers(mode), loads = modeLoads(mode);
+    const names = BTS.calibers(mode), loads = sideLoads(st);
     let pick = names.indexOf(st.name);
     if (pick < 0) { const k = loads.findIndex(l => l.name === st.name); if (k >= 0) pick = LOAD_BASE + k; }
     if (pick < 0) pick = Math.max(0, names.indexOf(DEFAULTS[mode].caliber));
     sd.caliberLabel.textContent = mode === 'shotgun' ? 'Gauge or load' : 'Caliber or load';
     sd.search.parentElement.hidden = mode === 'shotgun';
     if (mode === 'shotgun') sd.search.value = '';
-    fillCaliberSelect(sd.caliber, sd.count, pick, sd.search.value, mode);
+    fillCaliberSelect(sd.caliber, sd.count, pick, sd.search.value, mode, loads);
     const v = idx(sd.caliber), load = v >= LOAD_BASE ? loads[v - LOAD_BASE] || null : null, ci = load ? -1 : v;
     const picked = load ? load.name : names[ci];
     if (picked !== st.name) { st.name = picked; st.grains = null; st.custom = false; }
@@ -2107,6 +2117,9 @@
     cmpEl.error.textContent = bad.map(r => `${r === A ? 'A' : 'B'} (${r.label}) can’t be zeroed at ${Math.round(toDispDist(r.zeroYd))} ${u.d}: the bullet is still rising there.`).join(' ') +
       (bad.length ? ' Choose a longer zero.' : '');
     cmpEl.results.hidden = !!bad.length;
+    $('cmp-copy').disabled = false;
+    $('cmp-print').disabled = !!bad.length;
+    cmpLast = bad.length ? null : { A, B };
     if (bad.length) return;
     cmpEl.keyA.textContent = 'A: ' + A.label;
     cmpEl.keyB.textContent = 'B: ' + B.label;
@@ -2116,51 +2129,72 @@
   }
   function len1(inch) { return metric() ? (inch * BTS.CM_PER_INCH).toFixed(1).replace(/\.0$/, '') + ' cm' : (+inch.toFixed(1)) + ' in'; }
 
-  function renderCmpSummary(A, B, u) {
+  // The side-by-side table (screen and print). The last column is B − A where both are numbers.
+  function cmpSummaryHtml(A, B, u) {
     const dist = yd => Math.round(toDispDist(yd)).toLocaleString() + ' ' + u.d;
-    const vel = fps => (metric() ? Math.round(fps * 0.3048) : Math.round(fps)).toLocaleString() + ' ' + u.v;
-    const en = ftlb => Math.round(metric() ? ftlb * 1.35582 : ftlb).toLocaleString() + ' ' + u.e;
-    const mom = (gr, fps) => metric() ? (gr * 0.06479891 / 1000 * fps * 0.3048).toFixed(1) + ' kg·m/s' : momentum(gr, fps).toFixed(1) + ' lb·ft/s';
+    const velN = fps => metric() ? fps * 0.3048 : fps, enN = ftlb => metric() ? ftlb * 1.35582 : ftlb;
+    const momN = (gr, fps) => metric() ? gr * 0.06479891 / 1000 * fps * 0.3048 : momentum(gr, fps);
+    const vel = fps => Math.round(velN(fps)).toLocaleString() + ' ' + u.v;
+    const en = ftlb => Math.round(enN(ftlb)).toLocaleString() + ' ' + u.e;
+    const momU = metric() ? 'kg·m/s' : 'lb·ft/s';
     const reach = yd => yd == null ? 'past ' + dist(CMP_FAR_YD) : yd === 0 ? 'never' : dist(yd);
     const reachN = yd => yd == null ? Infinity : yd;
     const pbrText = r => r.pbr.over ? `none (rises ${len1(r.pbr.apexIn)})` : (r.pbr.endYd == null ? `${dist(r.pbr.startYd)} to past ${dist(PBR_MAX_YD)}` : `${Math.round(toDispDist(r.pbr.startYd))}–${dist(r.pbr.endYd)}`);
+    const sign = (v, dig) => (v > 0 ? '+' : v < 0 ? '−' : '±') + Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: dig, maximumFractionDigits: dig });
+    // Difference formatters: `d(aN, bN)` gets the raw numbers and returns text in display units.
+    const diffIn = (dig, unit, conv = x => x) => (a, b) => `${sign(conv(b) - conv(a), dig)}${unit ? ' ' + unit : ''}` + (conv(a) ? ` (${sign((conv(b) - conv(a)) / Math.abs(conv(a)) * 100, 0)}%)` : '');
+    const diffDist = (a, b) => isFinite(a) && isFinite(b) ? `${sign(Math.round(toDispDist(b)) - Math.round(toDispDist(a)), 0)} ${u.d}` : '–';
     const rows = [];
-    const row = (label, a, b, better, aN, bN, sub) => rows.push({ label, a, b, better, aN, bN, sub });
+    const row = (label, a, b, opts = {}) => rows.push(Object.assign({ label, a, b }, opts));
     const grp = label => rows.push({ grp: label });
     grp('Bullet');
-    row('Weight', loadWeightLabel(A.grains, cmp.a.mode), loadWeightLabel(B.grains, cmp.b.mode));
-    row('Diameter', A.dia ? (metric() ? (A.dia * 25.4).toFixed(2) + ' mm' : A.dia.toFixed(3) + ' in') : '–', B.dia ? (metric() ? (B.dia * 25.4).toFixed(2) + ' mm' : B.dia.toFixed(3) + ' in') : '–');
-    row('Sectional density', A.dia ? sectional(A.grains, A.dia).toFixed(3) : '–', B.dia ? sectional(B.grains, B.dia).toFixed(3) : '–', 'high',
-      A.dia ? sectional(A.grains, A.dia) : null, B.dia ? sectional(B.grains, B.dia) : null, 'Weight for its diameter; a rough guide to penetration');
-    row('G1 B.C.', A.bc.toFixed(3), B.bc.toFixed(3), 'high', A.bc, B.bc, 'Higher holds velocity and bucks wind better');
+    row('Weight', loadWeightLabel(A.grains, cmp.a.mode), loadWeightLabel(B.grains, cmp.b.mode),
+      { aN: A.grains, bN: B.grains, diff: diffIn(1, metric() ? 'g' : 'gr', g => metric() ? g * 0.06479891 : g) });
+    const diaTxt = d => d ? (metric() ? (d * 25.4).toFixed(2) + ' mm' : d.toFixed(3) + ' in') : '–';
+    row('Diameter', diaTxt(A.dia), diaTxt(B.dia), { aN: A.dia, bN: B.dia, diff: diffIn(metric() ? 2 : 3, metric() ? 'mm' : 'in', d => metric() ? d * 25.4 : d) });
+    const sdA = A.dia ? sectional(A.grains, A.dia) : null, sdB = B.dia ? sectional(B.grains, B.dia) : null;
+    row('Sectional density', sdA != null ? sdA.toFixed(3) : '–', sdB != null ? sdB.toFixed(3) : '–',
+      { better: 'high', aN: sdA, bN: sdB, diff: diffIn(3, ''), sub: 'Weight for its diameter; a rough guide to penetration' });
+    row('G1 B.C.', A.bc.toFixed(3), B.bc.toFixed(3), { better: 'high', aN: A.bc, bN: B.bc, diff: diffIn(3, ''), sub: 'Higher holds velocity and bucks wind better' });
     grp('At the muzzle');
-    row('Velocity', vel(A.vFps), vel(B.vFps), 'high', A.vFps, B.vFps);
-    row('Energy', en(BTS.energyFtLb(A.grains, A.vFps)), en(BTS.energyFtLb(B.grains, B.vFps)), 'high', BTS.energyFtLb(A.grains, A.vFps), BTS.energyFtLb(B.grains, B.vFps));
-    row('Momentum', mom(A.grains, A.vFps), mom(B.grains, B.vFps), 'high', momentum(A.grains, A.vFps), momentum(B.grains, B.vFps));
-    row('Taylor KO factor', A.dia ? taylorKo(A.grains, A.vFps, A.dia).toFixed(1) : '–', B.dia ? taylorKo(B.grains, B.vFps, B.dia).toFixed(1) : '–', 'high',
-      A.dia ? taylorKo(A.grains, A.vFps, A.dia) : null, B.dia ? taylorKo(B.grains, B.vFps, B.dia) : null, 'Weight × velocity × diameter ÷ 7000');
+    row('Velocity', vel(A.vFps), vel(B.vFps), { better: 'high', aN: A.vFps, bN: B.vFps, diff: diffIn(0, u.v, velN) });
+    const eA = BTS.energyFtLb(A.grains, A.vFps), eB = BTS.energyFtLb(B.grains, B.vFps);
+    row('Energy', en(eA), en(eB), { better: 'high', aN: eA, bN: eB, diff: diffIn(0, u.e, enN) });
+    row('Momentum', momN(A.grains, A.vFps).toFixed(1) + ' ' + momU, momN(B.grains, B.vFps).toFixed(1) + ' ' + momU,
+      { better: 'high', aN: momentum(A.grains, A.vFps), bN: momentum(B.grains, B.vFps), diff: diffIn(1, momU, m => metric() ? m * 0.45359237 * 0.3048 : m) });
+    const tA = A.dia ? taylorKo(A.grains, A.vFps, A.dia) : null, tB = B.dia ? taylorKo(B.grains, B.vFps, B.dia) : null;
+    row('Taylor KO factor', tA != null ? tA.toFixed(1) : '–', tB != null ? tB.toFixed(1) : '–',
+      { better: 'high', aN: tA, bN: tB, diff: diffIn(1, ''), sub: 'Weight × velocity × diameter ÷ 7000' });
     grp('Reach');
     const zA = Math.round(toDispDist(A.zeroYd)), zB = Math.round(toDispDist(B.zeroYd));
-    row(`Point-blank range, ${len1(state.vitalIn)} zone`, pbrText(A) + (cmp.split ? ` (${zA} ${u.d} zero)` : ''), pbrText(B) + (cmp.split ? ` (${zB} ${u.d} zero)` : ''), 'high',
-      A.pbr.over ? 0 : reachN(A.pbr.endYd), B.pbr.over ? 0 : reachN(B.pbr.endYd), cmp.split ? 'With each zero' : `With the ${zA} ${u.d} zero`);
+    row(`Point-blank range, ${len1(state.vitalIn)} zone`, pbrText(A) + (cmp.split ? ` (${zA} ${u.d} zero)` : ''), pbrText(B) + (cmp.split ? ` (${zB} ${u.d} zero)` : ''),
+      { better: 'high', aN: A.pbr.over ? 0 : reachN(A.pbr.endYd), bN: B.pbr.over ? 0 : reachN(B.pbr.endYd), diff: diffDist, sub: cmp.split ? 'With each zero' : `With the ${zA} ${u.d} zero` });
     row('Longest point-blank range', `${reach(A.best.endYd)}<span class="sub">zero at ${A.best.farZeroYd ? dist(A.best.farZeroYd) : '–'}</span>`,
-      `${reach(B.best.endYd)}<span class="sub">zero at ${B.best.farZeroYd ? dist(B.best.farZeroYd) : '–'}</span>`, 'high', reachN(A.best.endYd), reachN(B.best.endYd), 'With the best zero for this zone');
-    row('Supersonic to', reach(A.supersonicYd), reach(B.supersonicYd), 'high', reachN(A.supersonicYd), reachN(B.supersonicYd), `Above ${vel(BTS.ATMOSPHERE.soundFps)}, the speed of sound at 59 °F`);
-    GAME_ENERGY.forEach((g, i) => row(`${en(g.ftlb)}+ (${g.name}) to`, reach(A.cutoffs[i]), reach(B.cutoffs[i]), 'high', reachN(A.cutoffs[i]), reachN(B.cutoffs[i])));
-    let h = `<thead><tr><th></th><th class="side-a-h" title="${esc(A.label)}">A: ${esc(A.label)}</th><th class="side-b-h" title="${esc(B.label)}">B: ${esc(B.label)}</th></tr></thead><tbody>`;
+      `${reach(B.best.endYd)}<span class="sub">zero at ${B.best.farZeroYd ? dist(B.best.farZeroYd) : '–'}</span>`,
+      { better: 'high', aN: reachN(A.best.endYd), bN: reachN(B.best.endYd), diff: diffDist, sub: 'With the best zero for this zone' });
+    row('Supersonic to', reach(A.supersonicYd), reach(B.supersonicYd),
+      { better: 'high', aN: reachN(A.supersonicYd), bN: reachN(B.supersonicYd), diff: diffDist, sub: `Above ${vel(BTS.ATMOSPHERE.soundFps)}, the speed of sound at 59 °F` });
+    GAME_ENERGY.forEach((g, i) => row(`${en(g.ftlb)}+ (${g.name}) to`, reach(A.cutoffs[i]), reach(B.cutoffs[i]),
+      { better: 'high', aN: reachN(A.cutoffs[i]), bN: reachN(B.cutoffs[i]), diff: diffDist }));
+    let h = `<thead><tr><th></th><th class="side-a-h" title="${esc(A.label)}">A: ${esc(A.label)}</th><th class="side-b-h" title="${esc(B.label)}">B: ${esc(B.label)}</th><th class="diff-h">B − A</th></tr></thead><tbody>`;
+    // The ▲ goes right after the value, before any small line under it.
+    const mark = (v, win) => !win ? v : v.includes('<span class="sub">') ? v.replace('<span class="sub">', '<span class="mk" aria-label="higher"> ▲</span><span class="sub">') : v + '<span class="mk" aria-label="higher"> ▲</span>';
     rows.forEach(r => {
-      if (r.grp) { h += `<tr class="grp"><th colspan="3">${r.grp}</th></tr>`; return; }
+      if (r.grp) { h += `<tr class="grp"><th colspan="4">${r.grp}</th></tr>`; return; }
       let wa = false, wb = false;
-      if (r.better && r.aN != null && r.bN != null && r.aN !== r.bN) {
+      const both = r.aN != null && r.bN != null;
+      if (r.better && both && r.aN !== r.bN) {
         const big = Math.max(Math.abs(r.aN), Math.abs(r.bN));
         if (!isFinite(big) || Math.abs(r.aN - r.bN) / big > 0.005) { wa = r.aN > r.bN; wb = !wa; }
       }
-      // The ▲ goes right after the value, before any small line under it.
-      const mark = (v, win) => !win ? v : v.includes('<span class="sub">') ? v.replace('<span class="sub">', '<span class="mk" aria-label="higher"> ▲</span><span class="sub">') : v + '<span class="mk" aria-label="higher"> ▲</span>';
-      h += `<tr><th scope="row">${esc(r.label)}${r.sub ? `<span class="sub">${esc(r.sub)}</span>` : ''}</th><td${wa ? ' class="win"' : ''}>${mark(r.a, wa)}</td><td${wb ? ' class="win"' : ''}>${mark(r.b, wb)}</td></tr>`;
+      const diff = both && r.diff ? r.diff(r.aN, r.bN) : '–';
+      h += `<tr><th scope="row">${esc(r.label)}${r.sub ? `<span class="sub">${esc(r.sub)}</span>` : ''}</th><td${wa ? ' class="win"' : ''}>${mark(r.a, wa)}</td><td${wb ? ' class="win"' : ''}>${mark(r.b, wb)}</td><td class="diff">${diff}</td></tr>`;
     });
-    cmpEl.summary.innerHTML = h + '</tbody>';
-    cmpEl.sumNote.textContent = '▲ marks the higher value. Energy figures for game are common rules of thumb, not a guarantee: shot placement and bullet construction matter more.' +
+    return h + '</tbody>';
+  }
+  function renderCmpSummary(A, B, u) {
+    cmpEl.summary.innerHTML = cmpSummaryHtml(A, B, u);
+    cmpEl.sumNote.textContent = '▲ marks the higher value; B − A is the difference. Energy figures for game are common rules of thumb, not a guarantee: shot placement and bullet construction matter more.' +
       (A.dia && B.dia ? '' : ' Sectional density and Taylor KO need a caliber; a load of your own doesn’t say its diameter.');
   }
 
@@ -2179,6 +2213,12 @@
     }));
   }
   function renderCmpTable(A, B, u) {
+    cmpEl.table.innerHTML = cmpTableHtml(A, B, u);
+    cmpEl.tableNote.textContent = cmp.table === 'impact'
+      ? 'Momentum and Taylor KO favor heavy, wide bullets; energy favors speed. None of them measures how a bullet expands.'
+      : `Path is from the line of sight with ${cmp.split ? 'each side’s own zero' : 'the shared zero'}. Drift is for ${windText(u)}.`;
+  }
+  function cmpTableHtml(A, B, u) {
     const ranges = cmpRanges(), ra = sideRows(A, ranges), rb = sideRows(B, ranges), side = driftSide();
     const vel = fps => Math.round(metric() ? fps * 0.3048 : fps).toLocaleString();
     const en = (gr, fps) => Math.round(metric() ? BTS.energyFtLb(gr, fps) * 1.35582 : BTS.energyFtLb(gr, fps)).toLocaleString();
@@ -2193,34 +2233,42 @@
     ranges.forEach((d, i) => {
       h += `<tr><td>${d}</td>${cols.map(c => `<td class="sep">${c[1](A, ra[i])}</td><td class="cmp">${c[1](B, rb[i])}</td>`).join('')}</tr>`;
     });
-    cmpEl.table.innerHTML = h + '</tbody>';
-    cmpEl.tableNote.textContent = cmp.table === 'impact'
-      ? 'Momentum and Taylor KO favor heavy, wide bullets; energy favors speed. None of them measures how a bullet expands.'
-      : `Path is from the line of sight with ${cmp.split ? 'each side’s own zero' : 'the shared zero'}. Drift is for ${windText(u)}.`;
+    return h + '</tbody>';
   }
 
-  function drawCmpChart(A, B, u) {
-    const w = Math.max(280, cmpEl.chart.clientWidth), h = Math.max(220, cmpEl.chart.clientHeight);
+  // Path, velocity or energy for both sides, with reference marks: the vital zone around the line of sight (path),
+  // the speed of sound (velocity) and the game energy levels (energy).
+  function cmpChartSvg(A, B, u, kind, w, h, colors, interactive) {
     const maxD = toDispDist(cmp.maxYd), n = 120, xs = [];
     for (let i = 0; i <= n; i++) xs.push(maxD * i / n);
     const ra = sideRows(A, xs), rb = sideRows(B, xs);
+    const enConv = ftlb => metric() ? ftlb * 1.35582 : ftlb, velConv = fps => metric() ? fps * 0.3048 : fps;
     const pick = {
       path: { y: x => x.path, unit: u.h, title: `Path (${u.h})` },
-      velocity: { y: x => metric() ? x.v * 0.3048 : x.v, unit: u.v, title: `Velocity (${u.v})` },
-      energy: { y: (x, r) => metric() ? BTS.energyFtLb(r.grains, x.v) * 1.35582 : BTS.energyFtLb(r.grains, x.v), unit: u.e, title: `Energy (${u.e})` }
-    }[cmp.chart];
+      velocity: { y: x => velConv(x.v), unit: u.v, title: `Velocity (${u.v})` },
+      energy: { y: (x, r) => enConv(BTS.energyFtLb(r.grains, x.v)), unit: u.e, title: `Energy (${u.e})` }
+    }[kind];
     const ya = ra.map(x => pick.y(x, A)), yb = rb.map(x => pick.y(x, B));
-    const colors = screenColors(), fs = w >= 700 ? 15 : 14;
-    const m = { l: Math.round(fs * 4.3), r: 18, t: 18, b: Math.round(fs * 3.3) }, iw = w - m.l - m.r, ih = h - m.t - m.b;
+    const half = (metric() ? BTS.CM_PER_INCH : 1) * state.vitalIn / 2;
+    const refs = kind === 'energy' ? GAME_ENERGY.map(g => ({ y: enConv(g.ftlb), label: g.name }))
+      : kind === 'velocity' ? [{ y: velConv(BTS.ATMOSPHERE.soundFps), label: 'speed of sound' }] : [];
+    const fs = w >= 700 ? 15 : 14;
     let yMin = Math.min(...ya, ...yb), yMax = Math.max(...ya, ...yb);
-    if (cmp.chart === 'path') { yMin = Math.min(yMin, 0); yMax = Math.max(yMax, 0); } else yMin = 0;
+    if (kind === 'path') { yMin = Math.min(yMin, -half); yMax = Math.max(yMax, half); } else yMin = 0;
     const pad = (yMax - yMin) * 0.08 || 1;
-    yMax += pad; if (cmp.chart === 'path') yMin -= pad;
+    yMax += pad; if (kind === 'path') yMin -= pad;
     const ys = niceStep(yMax - yMin, 7), xst = niceStep(maxD, 9);
     yMin = Math.floor(yMin / ys) * ys; yMax = Math.ceil(yMax / ys) * ys;
-    const X = x => m.l + x / maxD * iw, Y = y => m.t + (yMax - y) / (yMax - yMin) * ih;
     const dec = v => (Math.abs(v) < 1e-9 ? '0' : Math.abs(ys) >= 1 ? Math.round(v).toLocaleString() : v.toFixed(ys < 0.1 ? 2 : 1));
+    // Room on the left for the widest tick label plus the axis title.
+    const widest = Math.max(dec(yMin).length, dec(yMax).length);
+    const m = { l: Math.round(fs * (2.4 + 0.6 * widest)), r: 18, t: 18, b: Math.round(fs * 3.3) }, iw = w - m.l - m.r, ih = h - m.t - m.b;
+    const X = x => m.l + x / maxD * iw, Y = y => m.t + (yMax - y) / (yMax - yMin) * ih;
     let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" font-family="Segoe UI, Arial, sans-serif" role="img" aria-label="${esc(pick.title)} for A and B">`;
+    if (kind === 'path') {
+      s += `<rect class="vital-band" x="${m.l}" y="${Y(half)}" width="${iw}" height="${Y(-half) - Y(half)}" fill="${colors.accent}" fill-opacity="0.13"/>`;
+      s += `<text x="${m.l + 6}" y="${Y(half) - 5}" font-size="${fs - 2}" fill="${colors.accent}">${esc(len1(state.vitalIn))} vital zone</text>`;
+    }
     for (let x = 0; x <= maxD + 1e-9; x += xst) s += `<line x1="${X(x)}" y1="${m.t}" x2="${X(x)}" y2="${m.t + ih}" stroke="${colors.grid}"/>`;
     for (let y = yMin; y <= yMax + 1e-9; y += ys) s += `<line x1="${m.l}" y1="${Y(y)}" x2="${m.l + iw}" y2="${Y(y)}" stroke="${colors.grid}"/>`;
     s += `<g fill="${colors.tick}" font-size="${fs}">`;
@@ -2228,22 +2276,31 @@
     for (let y = yMin; y <= yMax + 1e-9; y += ys) s += `<text x="${m.l - 10}" y="${Y(y) + fs * 0.35}" text-anchor="end">${dec(y)}</text>`;
     s += `<text x="${m.l + iw / 2}" y="${h - 6}" text-anchor="middle" fill="${colors.title}" font-weight="600">Range (${u.d})</text>`;
     s += `<text transform="translate(${fs} ${m.t + ih / 2}) rotate(-90)" text-anchor="middle" fill="${colors.title}" font-weight="600">${esc(pick.title)}</text></g>`;
-    if (cmp.chart === 'path') s += `<line x1="${X(0)}" y1="${Y(0)}" x2="${X(maxD)}" y2="${Y(0)}" stroke="${colors.los}" stroke-width="2"/>`;
-    const line = ys2 => ys2.map((y, i) => (i ? 'L' : 'M') + X(xs[i]).toFixed(1) + ' ' + Y(y).toFixed(1)).join('');
+    refs.filter(r => r.y <= yMax && r.y >= yMin).forEach(r => {
+      s += `<line class="ref-line" x1="${m.l}" y1="${Y(r.y)}" x2="${m.l + iw}" y2="${Y(r.y)}" stroke="${colors.tick}" stroke-width="1.25" stroke-dasharray="3 4"/>`;
+      s += `<text x="${m.l + iw - 4}" y="${Y(r.y) - 5}" text-anchor="end" font-size="${fs - 2}" fill="${colors.tick}">${esc(r.label)} ${Math.round(r.y).toLocaleString()}</text>`;
+    });
+    if (kind === 'path') s += `<line x1="${X(0)}" y1="${Y(0)}" x2="${X(maxD)}" y2="${Y(0)}" stroke="${colors.los}" stroke-width="2"/>`;
+    const line = v => v.map((y, i) => (i ? 'L' : 'M') + X(xs[i]).toFixed(1) + ' ' + Y(y).toFixed(1)).join('');
     s += `<path d="${line(ya)}" fill="none" stroke="${colors.path}" stroke-width="2.5" stroke-linejoin="round"/>`;
     s += `<path class="cmp-path" d="${line(yb)}" fill="none" stroke="${colors.compare}" stroke-width="2.5" stroke-dasharray="7 5" stroke-linejoin="round"/>`;
-    s += `<line class="hover-line" x1="0" y1="${m.t}" x2="0" y2="${m.t + ih}" stroke="${colors.axis}" visibility="hidden"/><rect class="hit" x="${m.l}" y="${m.t}" width="${iw}" height="${ih}" fill="transparent"/></svg>`;
-    cmpEl.chart.innerHTML = s + '<div class="tooltip" hidden></div>';
+    if (interactive) s += `<line class="hover-line" x1="0" y1="${m.t}" x2="0" y2="${m.t + ih}" stroke="${colors.axis}" visibility="hidden"/><rect class="hit" x="${m.l}" y="${m.t}" width="${iw}" height="${ih}" fill="transparent"/>`;
+    return { svg: s + '</svg>', xs, ya, yb, X, m, iw, n, unit: pick.unit };
+  }
+  function drawCmpChart(A, B, u) {
+    const w = Math.max(280, cmpEl.chart.clientWidth), h = Math.max(220, cmpEl.chart.clientHeight);
+    const c = cmpChartSvg(A, B, u, cmp.chart, w, h, screenColors(), true);
+    cmpEl.chart.innerHTML = c.svg + '<div class="tooltip" hidden></div>';
     const svg = cmpEl.chart.querySelector('svg'), tip = cmpEl.chart.querySelector('.tooltip'), hover = svg.querySelector('.hover-line');
     const fmt = v => cmp.chart === 'path' ? signed(v, 1) : Math.round(v).toLocaleString();
     svg.querySelector('.hit').addEventListener('pointermove', e => {
       const box = svg.getBoundingClientRect(), px = (e.clientX - box.left) * (w / box.width);
-      const i = Math.max(0, Math.min(n, Math.round((px - m.l) / iw * n)));
-      hover.setAttribute('x1', X(xs[i])); hover.setAttribute('x2', X(xs[i])); hover.setAttribute('visibility', 'visible');
+      const i = Math.max(0, Math.min(c.n, Math.round((px - c.m.l) / c.iw * c.n)));
+      hover.setAttribute('x1', c.X(c.xs[i])); hover.setAttribute('x2', c.X(c.xs[i])); hover.setAttribute('visibility', 'visible');
       tip.hidden = false;
-      tip.style.left = (X(xs[i]) / w * box.width) + 'px';
+      tip.style.left = (c.X(c.xs[i]) / w * box.width) + 'px';
       tip.style.top = (e.clientY - box.top) + 'px';
-      tip.innerHTML = `<b>${xs[i].toFixed(0)} ${u.d}</b><br><span class="t-a">A ${fmt(ya[i])} ${pick.unit}</span><br><span class="t-cmp">B ${fmt(yb[i])} ${pick.unit}</span>`;
+      tip.innerHTML = `<b>${c.xs[i].toFixed(0)} ${u.d}</b><br><span class="t-a">A ${fmt(c.ya[i])} ${c.unit}</span><br><span class="t-cmp">B ${fmt(c.yb[i])} ${c.unit}</span>`;
     });
     svg.querySelector('.hit').addEventListener('pointerleave', () => { tip.hidden = true; hover.setAttribute('visibility', 'hidden'); });
   }
@@ -2256,7 +2313,7 @@
       sd.from.value = '';
       const saved = v === '#setup' ? null : (readSaved() || []).find(x => x.name === v);
       const p = profileFromCode(v === '#setup' ? shareCode() : saved ? saved.code : '');
-      if (!p) { toast('That setup uses a load that’s no longer in My loads'); return; }
+      if (!p) { toast('That setup couldn’t be read'); return; }
       sd.search.value = '';
       cmp[sd.key] = p;
       renderCompare();
@@ -2268,7 +2325,7 @@
       renderCompare();
     });
     sd.caliber.addEventListener('change', () => {
-      const v = idx(sd.caliber), loads = modeLoads(st().mode);
+      const v = idx(sd.caliber), loads = sideLoads(st());
       Object.assign(st(), { name: v >= LOAD_BASE ? loads[v - LOAD_BASE].name : BTS.calibers(st().mode)[v], grains: null, custom: false });
       renderCompare();
     });
@@ -2300,7 +2357,90 @@
   let cmpResize = 0;
   window.addEventListener('resize', () => { clearTimeout(cmpResize); cmpResize = setTimeout(() => { if (state.view === 'compare') renderCompare(); }, 150); });
 
+  // ---------- Compare: link and printed sheet ----------
+  // A comparison link is #compare= followed by base64url JSON. A side that uses one of my loads carries its numbers,
+  // so it opens on a device that doesn't have that load (shown as "from link").
+  const b64url = str => btoa(unescape(encodeURIComponent(str))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const unb64url = str => decodeURIComponent(escape(atob(str.replace(/-/g, '+').replace(/_/g, '/'))));
+  const r2 = v => Math.round(v * 100) / 100;
+  function cmpEncode() {
+    const side = st => {
+      const o = { m: st.mode, n: st.name, g: st.grains, s: st.shape, h: r2(st.sightIn) };
+      if (st.custom) { o.v = Math.round(st.vFps); o.b = st.bc; }
+      const load = sideLoads(st).find(l => l.name === st.name);
+      if (load) o.L = [load.grains, load.fps, load.bc];
+      return o;
+    };
+    return b64url(JSON.stringify({ a: side(cmp.a), b: side(cmp.b), z: r2(cmp.zeroYd), zb: r2(cmp.zeroBYd), sp: cmp.split ? 1 : 0, x: r2(cmp.maxYd), c: cmp.chart, t: cmp.table }));
+  }
+  function cmpDecode(code) {
+    let o;
+    try { o = JSON.parse(unb64url(code)); } catch (e) { return null; }
+    const side = s => {
+      if (!s || !BTS.MODES.includes(s.m) || typeof s.n !== 'string') return null;
+      const st = { mode: s.m, name: s.n, grains: +s.g || null, shape: typeof s.s === 'string' ? s.s : null, sightIn: +s.h || null, custom: false };
+      if (s.v > 0 && s.b > 0) Object.assign(st, { vFps: +s.v, bc: +s.b, custom: true });
+      if (Array.isArray(s.L) && !BTS.calibers(s.m).includes(s.n)) {
+        const load = normLoad({ name: s.n, mode: s.m, grains: s.L[0], fps: s.L[1], bc: s.L[2] });
+        if (!load) return null;
+        if (!modeLoads(s.m).some(l => sameLoad(l, load))) st.adhoc = Object.assign(load, { adhoc: true });
+      }
+      return st;
+    };
+    const a = side(o && o.a), b = side(o && o.b), num = (v, lo, hi, d) => (v >= lo && v <= hi ? +v : d);
+    if (!a || !b) return null;
+    return { a, b, zeroYd: num(o.z, 1, 2000, 100), zeroBYd: num(o.zb, 1, 2000, num(o.z, 1, 2000, 100)), split: !!o.sp, maxYd: num(o.x, 10, 2000, 500),
+      chart: ['path', 'velocity', 'energy'].includes(o.c) ? o.c : 'path', table: o.t === 'impact' ? 'impact' : 'trajectory' };
+  }
+  const compareUrl = () => setupUrl('compare=' + cmpEncode());
+  // Opens a #compare= link: the comparison replaces this browser's, Compare shows, and the address goes back to plain.
+  function openCompareLink(hash) {
+    const c = cmpDecode(hash.slice('#compare='.length));
+    history.replaceState(null, '', location.pathname + location.search);
+    if (!c) { toast('That comparison link couldn’t be read'); return false; }
+    cmp = c;
+    cmpSave();
+    toast('Opened a comparison from a link');
+    return true;
+  }
+  $('cmp-copy').addEventListener('click', () => { if (cmp) copyLink(compareUrl()); });
+  $('cmp-print').addEventListener('click', () => print('compare'));
+
+  // The printed comparison: the side-by-side table and two charts on page 1, both by-range tables on page 2.
+  function compareSheet(paper) {
+    const { A, B } = cmpLast, u = trajectoryUnits();
+    const light = { grid: '#d9dee5', axis: '#5f6b7a', tick: '#444', title: '#222', los: '#1f6fe5', path: '#b07d0b', laser: '#e0283d', accent: '#0f9d8a', bg: '#fff', compare: '#7b3fc4' };
+    const pathChart = cmpChartSvg(A, B, u, 'path', 540, 300, light, false).svg, energyChart = cmpChartSvg(A, B, u, 'energy', 540, 300, light, false).svg;
+    const saved = cmp.table;
+    cmp.table = 'trajectory'; const traj = cmpTableHtml(A, B, u);
+    cmp.table = 'impact'; const impact = cmpTableHtml(A, B, u);
+    cmp.table = saved;
+    const zeroTxt = cmp.split ? `A zeroed at ${Math.round(toDispDist(A.zeroYd))} ${u.d}, B at ${Math.round(toDispDist(B.zeroYd))} ${u.d}` : `both zeroed at ${Math.round(toDispDist(A.zeroYd))} ${u.d}`;
+    const sub = `<span style="color:#b07d0b">A</span> ${esc(A.label)} vs <span style="color:#7b3fc4">B</span> ${esc(B.label)} · ${zeroTxt}`;
+    const footer = `<footer>G1 point-mass model, standard atmosphere (59 °F, 29.53 inHg), level ground. Wind ${esc(windText(u))}. Printed ${esc(new Date().toLocaleString())}.</footer>`;
+    return `<div class="sheet report cmp-sheet" style="width:${paper.w}in;height:${paper.h}in">
+      <header><svg viewBox="0 0 32 32" width="34" height="34"><circle cx="16" cy="16" r="11" fill="none" stroke="#0f9d8a" stroke-width="2.5"/><path d="M16 1v8M16 23v8M1 16h8M23 16h8" stroke="#0f9d8a" stroke-width="2.5"/><circle cx="16" cy="16" r="3" fill="#e0283d"/></svg>
+      <div><h1>Load Comparison</h1><p>${sub}</p></div>
+      <div class="report-qr"><span>Scan to open<br>this comparison</span><svg viewBox="0 0 1 1" width="0.8in" height="0.8in">${qrCode(0, 0, 1, compareUrl())}</svg></div></header>
+      <table class="cmp-print-sum">${cmpSummaryHtml(A, B, u)}</table>
+      <div class="report-cols cmp-print-charts"><div class="report-chart">${pathChart}</div><div class="report-chart">${energyChart}</div></div>
+      <p class="report-legend"><span style="color:#b07d0b">━ A: ${esc(A.label)}</span><span style="color:#7b3fc4">╍ B: ${esc(B.label)}</span></p>
+      ${footer}
+    </div>
+    <div class="sheet report cmp-sheet" style="width:${paper.w}in;height:${paper.h}in">
+      <header><div><h1>Load Comparison · by range</h1><p>${sub}</p></div></header>
+      <h2>Trajectory</h2>
+      <table class="report-traj">${traj}</table>
+      <h2>Impact</h2>
+      <table class="report-traj">${impact}</table>
+      <p class="report-note">Path is from the line of sight. Momentum and Taylor KO favor heavy, wide bullets; energy favors speed. Energy levels for game are rules of thumb, not a guarantee.</p>
+      ${footer}
+    </div>`;
+  }
+
   // ---------- Start ----------
+  const compareLink = /^#compare=/.test(location.hash) && openCompareLink(location.hash);
+  if (compareLink) state.view = 'compare';
   const startHash = location.hash;
   if (!applyShareCode(startHash)) {
     el.paper.value = state.paper;
@@ -2333,6 +2473,7 @@
   }
   // A link pasted into an open tab only changes the hash, so apply it here too.
   window.addEventListener('hashchange', () => {
+    if (/^#compare=/.test(location.hash)) { if (openCompareLink(location.hash)) setView('compare'); return; }
     if (!applyShareCode(location.hash)) showPreview(location.hash);
   });
   showPreview(startHash);
