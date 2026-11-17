@@ -27,28 +27,9 @@
       </div>
     </div>
     <div class="prefs">
-      <div class="segmented" role="group" aria-label="Theme">
-        <button type="button" data-theme-pick="dark" aria-pressed="true" title="Dark theme">Dark</button>
-        <button type="button" data-theme-pick="sun" aria-pressed="false" title="High-contrast light theme for bright sun">Sun</button>
-        <button type="button" data-theme-pick="night" aria-pressed="false" title="Red-on-black theme that keeps your night vision">Night</button>
-      </div>
       <button type="button" class="btn" id="install" hidden title="Add this site as an app that works offline">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M4 19h16"/></svg>
         Install app
-      </button>
-      <div class="segmented" role="group" aria-label="Units">
-        <button type="button" data-units="english" aria-pressed="true">Imperial</button>
-        <button type="button" data-units="metric" aria-pressed="false">Metric</button>
-      </div>
-      <label class="paper">
-        <span class="visually-hidden">Paper size</span>
-        <select id="paper">
-          <option value="letter">Letter</option>
-          <option value="a4">A4</option>
-        </select>
-      </label>
-      <button type="button" class="icon-btn" id="reset-all" aria-label="Reset all settings" title="Reset all settings to their defaults (keeps your saved setups and loads)">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
       </button>
       <div class="segmented view-tabs" role="group" aria-label="View">
         <button type="button" data-view="setup" aria-pressed="true">
@@ -63,6 +44,42 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M5 7h4M15 7h4M3 15l3-8 3 8M15 15l3-8 3 8M3 15a3 2 0 0 0 6 0M15 15a3 2 0 0 0 6 0"/></svg>
           Compare
         </button>
+      </div>
+      <div class="settings">
+        <button type="button" class="icon-btn settings-btn" id="settings-btn" aria-label="Settings" aria-expanded="false" aria-controls="settings-panel" title="Units, theme, paper size and reset">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+        </button>
+        <div class="settings-panel" id="settings-panel" role="group" aria-label="Settings" hidden>
+          <div class="set-row">
+            <span>Units</span>
+            <div class="segmented" role="group" aria-label="Units">
+              <button type="button" data-units="english" aria-pressed="true">Imperial</button>
+              <button type="button" data-units="metric" aria-pressed="false">Metric</button>
+            </div>
+          </div>
+          <div class="set-row">
+            <span>Theme</span>
+            <div class="segmented" role="group" aria-label="Theme">
+              <button type="button" data-theme-pick="dark" aria-pressed="true" title="Dark theme">Dark</button>
+              <button type="button" data-theme-pick="sun" aria-pressed="false" title="High-contrast light theme for bright sun">Sun</button>
+              <button type="button" data-theme-pick="night" aria-pressed="false" title="Red-on-black theme that keeps your night vision">Night</button>
+            </div>
+          </div>
+          <label class="set-row paper">
+            <span>Paper size</span>
+            <select id="paper">
+              <option value="letter">Letter</option>
+              <option value="a4">A4</option>
+            </select>
+          </label>
+          <div class="set-reset">
+            <button type="button" class="btn" id="reset-all" title="Reset all settings to their defaults (keeps your saved setups and loads)">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
+              Reset all settings
+            </button>
+            <p class="hint">Keeps your saved setups and loads.</p>
+          </div>
+        </div>
       </div>
     </div>
   </header>
@@ -415,9 +432,9 @@
 
   <main class="field-view" id="field-view" hidden aria-labelledby="field-title">
     <h2 id="field-title" class="visually-hidden">Field</h2>
-    <div class="card f-profile">
+    <div class="f-profile">
       <button type="button" class="chip" id="f-chip" title="Change the rifle and load in Setup">
-        <span class="chip-label">Active profile</span>
+        <span class="visually-hidden">Active profile: </span>
         <span class="chip-name" id="f-name">–</span>
         <span class="chip-sub" id="f-sub"></span>
       </button>
@@ -430,8 +447,6 @@
     <div id="f-error" class="alert" role="alert" hidden></div>
 
     <div id="f-body">
-      <p class="f-pbr" id="f-pbr"></p>
-
       <section class="card f-range" aria-labelledby="f-range-label">
         <span class="field-label" id="f-range-label">Range</span>
         <div class="stepper">
@@ -456,6 +471,8 @@
         <p class="f-stats" id="f-stats"></p>
         <p class="f-warn" id="f-warn" hidden></p>
       </section>
+
+      <p class="f-pbr" id="f-pbr"></p>
 
       <section class="card f-cond" aria-label="Conditions">
         <div class="f-cond-row">
