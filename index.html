@@ -27,6 +27,11 @@
       </div>
     </div>
     <div class="prefs">
+      <div class="segmented" role="group" aria-label="Theme">
+        <button type="button" data-theme-pick="dark" aria-pressed="true" title="Dark theme">Dark</button>
+        <button type="button" data-theme-pick="sun" aria-pressed="false" title="High-contrast light theme for bright sun">Sun</button>
+        <button type="button" data-theme-pick="night" aria-pressed="false" title="Red-on-black theme that keeps your night vision">Night</button>
+      </div>
       <button type="button" class="btn" id="install" hidden title="Add this site as an app that works offline">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M4 19h16"/></svg>
         Install app
@@ -45,6 +50,16 @@
       <button type="button" class="icon-btn" id="reset-all" aria-label="Reset all settings" title="Reset all settings to their defaults (keeps your saved setups and loads)">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
       </button>
+      <div class="segmented view-tabs" role="group" aria-label="View">
+        <button type="button" data-view="setup" aria-pressed="true">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>
+          Setup
+        </button>
+        <button type="button" data-view="field" aria-pressed="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/><circle cx="12" cy="12" r="1.5"/></svg>
+          Field
+        </button>
+      </div>
     </div>
   </header>
 
@@ -421,6 +436,75 @@
         <p class="hint">Turn the turret the way shown; most turrets are marked “UP” and “R”. Check your scope's manual, since some click values differ from their labels.</p>
       </div>
     </section>
+  </main>
+
+  <main class="field-view" id="field-view" hidden aria-labelledby="field-title">
+    <h2 id="field-title" class="visually-hidden">Field</h2>
+    <div class="card f-profile">
+      <button type="button" class="chip" id="f-chip" title="Change the rifle and load in Setup">
+        <span class="chip-label">Active profile</span>
+        <span class="chip-name" id="f-name">–</span>
+        <span class="chip-sub" id="f-sub"></span>
+      </button>
+      <label class="f-saved" id="f-saved-wrap" hidden>
+        <span class="visually-hidden">Switch to a saved setup</span>
+        <select id="f-saved"></select>
+      </label>
+    </div>
+
+    <div id="f-error" class="alert" role="alert" hidden></div>
+
+    <div id="f-body">
+      <p class="f-pbr" id="f-pbr"></p>
+
+      <section class="card f-range" aria-labelledby="f-range-label">
+        <span class="field-label" id="f-range-label">Range</span>
+        <div class="stepper">
+          <button type="button" class="step-btn" id="f-minus" aria-label="Shorter range">−</button>
+          <span class="input-unit big"><input id="f-range" type="number" inputmode="decimal" min="1" max="2000" step="any" aria-label="Range to target"><span class="f-dist">yd</span></span>
+          <button type="button" class="step-btn" id="f-plus" aria-label="Longer range">+</button>
+        </div>
+        <div class="presets" id="f-presets" role="group" aria-label="Range presets"></div>
+      </section>
+
+      <section class="card f-out" aria-live="polite" aria-label="Holds at this range">
+        <div class="hold">
+          <span class="field-label">Elevation</span>
+          <span class="hold-value" id="f-elev">–</span>
+          <span class="hold-sub" id="f-elev-sub"></span>
+        </div>
+        <div class="hold">
+          <span class="field-label">Wind</span>
+          <span class="hold-value" id="f-wind">–</span>
+          <span class="hold-sub" id="f-wind-sub"></span>
+        </div>
+        <p class="f-stats" id="f-stats"></p>
+        <p class="f-warn" id="f-warn" hidden></p>
+      </section>
+
+      <section class="card f-cond" aria-label="Conditions">
+        <div class="f-cond-row">
+          <div class="mini">
+            <span id="f-wind-label">Wind</span>
+            <div class="stepper small">
+              <button type="button" class="step-btn" id="f-wminus" aria-label="Less wind">−</button>
+              <span class="input-unit"><input id="f-windspd" type="number" inputmode="decimal" min="0" max="99" step="1" aria-label="Wind speed"><span id="f-wind-unit">mph</span></span>
+              <button type="button" class="step-btn" id="f-wplus" aria-label="More wind">+</button>
+            </div>
+          </div>
+          <label class="mini"><span>From</span><select id="f-clock"></select></label>
+        </div>
+        <div class="f-cond-row">
+          <label class="mini"><span>Shot angle</span><select id="f-slope"></select></label>
+          <label class="mini"><span>Scope clicks</span><select id="f-click"></select></label>
+        </div>
+      </section>
+    </div>
+
+    <div class="f-foot">
+      <label class="check" id="f-wake-wrap" hidden><input type="checkbox" id="f-wake"> Keep screen on</label>
+      <span class="hint" id="f-status"></span>
+    </div>
   </main>
 
   <footer class="foot">
