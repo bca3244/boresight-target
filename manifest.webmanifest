@@ -1,6 +1,6 @@
 {
-  "name": "Boresight Target Generator",
-  "short_name": "Boresight",
+  "name": "Firearm Sight-In & Ballistics Calculator",
+  "short_name": "Sight-In Calc",
   "description": "Boresight, sight in and dial: true-scale laser boresight and sight-in targets, scope clicks and a trajectory table for your firearm, sight height, load and zero range.",
   "start_url": "./",
   "scope": "./",
