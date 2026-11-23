@@ -357,6 +357,14 @@
             <span>Shot angle</span>
             <select id="slope" title="Uphill or downhill angle to the target"></select>
           </label>
+          <label class="mini t-field">
+            <span>Altitude</span>
+            <select id="alt" title="Altitude where you shoot (the zero is for standard air)"></select>
+          </label>
+          <label class="mini t-field">
+            <span>Temperature</span>
+            <select id="temp" title="Air temperature where you shoot"></select>
+          </label>
         </div>
         <p class="hint traj-hint" id="traj-hint">MOA and mil are from the line of sight. 3 and 9 o'clock winds push the bullet the most; 12 and 6 o'clock winds don't push it sideways.</p>
         <div class="table-wrap"><table class="data" id="traj-table"></table></div>
@@ -489,6 +497,10 @@
         <div class="f-cond-row">
           <label class="mini"><span>Shot angle</span><select id="f-slope"></select></label>
           <label class="mini"><span>Scope clicks</span><select id="f-click"></select></label>
+        </div>
+        <div class="f-cond-row">
+          <label class="mini"><span>Altitude</span><select id="f-alt"></select></label>
+          <label class="mini"><span>Temperature</span><select id="f-temp"></select></label>
         </div>
       </section>
     </div>
@@ -626,7 +638,7 @@
   </main>
 
   <footer class="foot">
-    <p>Calculations use a G1 point-mass model in standard atmosphere (59&nbsp;°F, 29.53&nbsp;inHg). Typical velocities and ballistic coefficients are estimates; enter your own values for best results.</p>
+    <p>Calculations use a G1 point-mass model in standard atmosphere (59&nbsp;°F, 29.53&nbsp;inHg). Altitude and temperature change the air for the trajectory table, range card and Field holds; the zero is for standard air. Typical velocities and ballistic coefficients are estimates; enter your own values for best results.</p>
   </footer>
 </div>
 

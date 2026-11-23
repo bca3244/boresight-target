@@ -16,7 +16,7 @@
     savedName: $('saved-name'), savedSave: $('saved-save'), savedNote: $('saved-note'), savedCount: $('saved-count'),
     savedExport: $('saved-export'), savedImport: $('saved-import'), savedFile: $('saved-file'),
     trajTable: $('traj-table'), trajNote: $('traj-note'), wind: $('wind'), windUnit: $('wind-unit'),
-    windClock: $('wind-clock'), slope: $('slope'), tMax: $('t-max'), tStep: $('t-step'), trajHint: $('traj-hint'), printCard: $('print-card'),
+    windClock: $('wind-clock'), slope: $('slope'), alt: $('alt'), temp: $('temp'), tMax: $('t-max'), tStep: $('t-step'), trajHint: $('traj-hint'), printCard: $('print-card'),
     cardClick: $('card-click'), cardHint: $('card-hint'), cardPreview: $('card-preview'),
     pbrZone: $('pbr-zone'), pbrUnit: $('pbr-unit'), pbrUse: $('pbr-use'), pbrHint: $('pbr-hint'),
     cRange: $('c-range'), cClick: $('c-click'), cVert: $('c-vert'), cVdir: $('c-vdir'), cHoriz: $('c-horiz'), cHdir: $('c-hdir'),
@@ -32,7 +32,7 @@
     range: $('f-range'), minus: $('f-minus'), plus: $('f-plus'), presets: $('f-presets'),
     elev: $('f-elev'), elevSub: $('f-elev-sub'), wind: $('f-wind'), windSub: $('f-wind-sub'), stats: $('f-stats'), warn: $('f-warn'),
     windSpd: $('f-windspd'), windUnit: $('f-wind-unit'), wMinus: $('f-wminus'), wPlus: $('f-wplus'),
-    clock: $('f-clock'), slope: $('f-slope'), click: $('f-click'),
+    clock: $('f-clock'), slope: $('f-slope'), click: $('f-click'), alt: $('f-alt'), temp: $('f-temp'),
     wakeWrap: $('f-wake-wrap'), wake: $('f-wake'), status: $('f-status')
   };
 
@@ -54,6 +54,11 @@
   const SLOPE_MAX = 60;
   function slopePref() { const v = parseInt(loadPref('slope', '0'), 10); return Math.abs(v) <= SLOPE_MAX && v % 5 === 0 ? v : 0; }
   function slopeText(deg) { return deg ? Math.abs(deg) + '° ' + (deg > 0 ? 'uphill' : 'downhill') : 'level'; }
+  // Air where you shoot, for the trajectory table, range card and Field (the zero is solved in standard air):
+  // altitude kept in feet and temperature in °F whatever the units. Sea level at 59 °F is the standard atmosphere.
+  const ALT_MAX_FT = 12000, TEMP_MIN_F = -40, TEMP_MAX_F = 120, STD_TEMP_F = 59, FT_PER_M = 1 / 0.3048;
+  function altPref() { const v = parseFloat(loadPref('alt', '')); return v >= 0 && v <= ALT_MAX_FT ? v : 0; }
+  function tempPref() { const v = parseFloat(loadPref('temp', '')); return v >= TEMP_MIN_F && v <= TEMP_MAX_F ? v : STD_TEMP_F; }
   // Vital zone for the point-blank range, kept in inches (6 in, about 15 cm, is a common deer-size zone).
   const VITAL_DEFAULT_IN = 6, VITAL_MIN_IN = 1, VITAL_MAX_IN = 48;
   function vitalPref() { const v = parseFloat(loadPref('vital', '')); return v >= VITAL_MIN_IN && v <= VITAL_MAX_IN ? v : VITAL_DEFAULT_IN; }
@@ -84,12 +89,20 @@
     vitalIn: vitalPref(), // vital zone for the point-blank range, in inches
     windClock: clockPref(), // where the wind comes from, 1-12 o'clock (3 = from the right)
     slopeDeg: slopePref(),  // shot angle in degrees, + uphill
+    altFt: altPref(),       // altitude where you shoot, feet
+    tempF: tempPref(),      // air temperature where you shoot, °F
     table: tablePrefs(),    // trajectory table extent per firearm: { max, step } in the displayed distance unit
     loads: [],           // my loads (every firearm type), see normLoad(); read from storage below, once their limits exist
     linkLoad: null,      // a load opened from a link that isn't in my loads
     result: null
   };
   const metric = () => state.units === 'metric';
+  // The air for the table, card and Field, or null for the standard atmosphere (so standard results stay exactly as before).
+  function airNow() { return state.altFt || state.tempF !== STD_TEMP_F ? BTS.atmosphere(state.altFt, state.tempF) : null; }
+  const altLabel = ft => metric() ? (ft ? Math.round(ft / FT_PER_M).toLocaleString() + ' m' : 'Sea level') : (ft ? Math.round(ft).toLocaleString() + ' ft' : 'Sea level');
+  const tempLabel = f => metric() ? Math.round((f - 32) * 5 / 9) + ' °C' : Math.round(f) + ' °F';
+  // '5,000 ft, 41 °F' when the air isn't standard, else ''.
+  function airText() { return airNow() ? `${altLabel(state.altFt).replace('Sea level', 'sea level')}, ${tempLabel(state.tempF)}` : ''; }
 
   // ---------- Select helpers ----------
 
@@ -430,7 +443,7 @@
     const toYd = d => (metric() ? d / BTS.METERS_PER_YARD : d);
     const grains = state.lists.weights[idx(el.weight)].grains;
     const windMph = state.windMph * windFactor();
-    return BTS.trajectoryTable(state.vFps, state.bc, sightIn, angle, disp.map(toYd), state.slopeDeg).map((p, i) => {
+    return BTS.trajectoryTable(state.vFps, state.bc, sightIn, angle, disp.map(toYd), state.slopeDeg, airNow()).map((p, i) => {
       const rangeYd = toYd(disp[i]), driftIn = BTS.windDriftIn(windMph, rangeYd, p.t, state.vFps);
       return {
         range: disp[i],
@@ -487,6 +500,7 @@
     el.trajNote.textContent = (r.nearZero != null ? `Near zero ${r.nearZero.toFixed(1)} ${u.d} · ` : '') + `Max rise ${riseText(r.rise)}` + (state.slopeDeg ? ' (level ground)' : '');
     el.trajHint.textContent = (state.tableCut ? `Showing the first ${TABLE_ROWS} ranges; choose a longer step to see farther. ` : '') +
       (state.slopeDeg ? `Shooting ${slopeText(state.slopeDeg)}: ranges are line-of-sight distances (what a rangefinder reads), for a zero made on level ground. ` : '') +
+      (airNow() ? `Air at ${airText()}, for a zero made in standard air (sea level, 59 °F). ` : '') +
       'MOA and mil are from the line of sight. 3 and 9 o\'clock winds push the bullet the most; 12 and 6 o\'clock winds don\'t push it sideways.';
     renderCard();
   }
@@ -553,6 +567,7 @@
     if (document.activeElement !== el.wind) el.wind.value = String(windDisplay());
     el.windClock.value = String(state.windClock);
     el.slope.value = String(state.slopeDeg);
+    showAir();
     document.querySelectorAll('.t-dist').forEach(s => { s.textContent = u.d; });
     if (document.activeElement !== el.tMax) el.tMax.value = String(t.max);
     el.tStep.value = String(t.step);
@@ -906,6 +921,7 @@
       ['G1 B.C.', r.bc.toFixed(3) + (state.custom || currentLoad() ? '' : ' (typical)')],
       ['Zero range', r.zero + ' ' + unitD],
       ...(state.slopeDeg ? [['Shot angle', slopeText(state.slopeDeg) + ' (table only)']] : []),
+      ...(airNow() ? [['Air', airText() + ' (table only)']] : []),
       ['Meet distance', r.meet.toFixed(1) + ' ' + unitD],
       ['Maximum rise', riseText(r.rise)],
       ['Target range', (t.meet ? r.meet.toFixed(1) : t.range) + ' ' + unitD],
@@ -1062,7 +1078,7 @@
     g += `<text x="${tx}" y="${y0 + pad + 0.11}" font-size="0.13" font-weight="700">${esc(caliberName())}</text>`;
     g += `<text x="${tx + tw}" y="${y0 + pad + 0.11}" text-anchor="end" font-size="0.085" fill="#444">Zero ${r.zero} ${u.d} · sight ${r.sight.value.toFixed(1)} ${metric() ? 'cm' : 'in'}</text>`;
     g += `<text x="${tx}" y="${y0 + pad + 0.26}" font-size="0.085" fill="#333">${esc(w.label + ' ' + s.label)} · ${v} · G1 B.C. ${r.bc.toFixed(3)}</text>`;
-    g += `<text x="${tx}" y="${y0 + pad + 0.39}" font-size="0.085" fill="#333">Clicks to dial at ${esc(clickLabel)} · wind ${esc(windText(u))}${state.slopeDeg ? " · " + slopeText(state.slopeDeg) : ""}</text>`;
+    g += `<text x="${tx}" y="${y0 + pad + 0.39}" font-size="0.085" fill="#333">Clicks to dial at ${esc(clickLabel)} · wind ${esc(windText(u))}${state.slopeDeg ? " · " + slopeText(state.slopeDeg) : ""}${airNow() ? " · " + esc(airText()) : ""}</text>`;
     // Table: range, elevation (clicks and angle), windage (clicks and angle), one or two column groups.
     const top = y0 + pad + 0.58, bottom = y0 + CH - pad - 0.08, perCol = Math.ceil(rows.length / cols);
     const rowH = Math.min(0.2, (bottom - top - 0.2) / perCol), fs = Math.min(0.105, rowH * 0.62);
@@ -1116,7 +1132,7 @@
     const traj = `<table class="report-traj${r.table.length > 24 ? ' dense' : ''}">${trajectoryHead(u, true)}` +
       r.table.map(row => `<tr${row.zero ? ' class="zero-row"' : ''}><td>${row.range}${row.zero ? ' (zero)' : ''}</td>${trajectoryCells(row, '')}</tr>`).join('') + '</table>';
     const unitD = u.d;
-    const footer = `<footer>G1 point-mass model, standard atmosphere (59 °F, 29.53 inHg). Printed ${esc(new Date().toLocaleString())}. Confirm your zero with live fire.</footer>`;
+    const footer = `<footer>G1 point-mass model, standard atmosphere (59 °F, 29.53 inHg)${airNow() ? `; trajectory table at ${esc(airText())}` : ''}. Printed ${esc(new Date().toLocaleString())}. Confirm your zero with live fire.</footer>`;
     const page2 = !second ? '' : `<div class="sheet report" style="width:${paper.w}in;height:${paper.h}in">
       <header><div><h1>Boresight Report · trajectory</h1><p>${esc(caliberName())} · zeroed at ${r.zero} ${unitD} · ${esc(state.lists.weights[idx(el.weight)].label)} ${esc(state.lists.shapes[idx(el.shape)].label)}</p></div></header>
       ${traj}
@@ -1233,6 +1249,41 @@
     savePref('slope', String(state.slopeDeg));
     refreshTable();
   });
+  // Altitude and temperature: choices in the displayed units (feet every 500 or metres every 150; °F or °C every 5),
+  // shared by Setup and Field. The stored value is converted from the choice, and a stored value shows as its nearest choice.
+  function airChoices() {
+    const alt = [], temp = [];
+    if (metric()) {
+      for (let m = 0; m <= 3600; m += 150) alt.push({ v: m * FT_PER_M, t: m ? m.toLocaleString() + ' m' : 'Sea level' });
+      for (let c = -40; c <= 45; c += 5) temp.push({ v: c * 9 / 5 + 32, t: c + ' °C' + (c === 15 ? ' (standard)' : '') });
+    } else {
+      for (let f = 0; f <= ALT_MAX_FT; f += 500) alt.push({ v: f, t: f ? f.toLocaleString() + ' ft' : 'Sea level' });
+      for (let f = -20; f <= 110; f += 5) temp.push({ v: f, t: f + ' °F' });
+      temp.splice(temp.findIndex(o => o.v === 60), 0, { v: STD_TEMP_F, t: STD_TEMP_F + ' °F (standard)' });
+    }
+    return { alt, temp };
+  }
+  function showAir() {
+    const c = airChoices(), key = state.units;
+    const nearest = (list, v) => list.reduce((b, o, i) => Math.abs(o.v - v) < Math.abs(list[b].v - v) - 1e-9 ? i : b, 0);
+    [[el.alt, fe.alt, c.alt, state.altFt], [el.temp, fe.temp, c.temp, state.tempF]].forEach(([a, b, list, v]) => {
+      [a, b].forEach(s => {
+        if (s.dataset.key !== key) { s.innerHTML = list.map((o, i) => `<option value="${i}">${o.t}</option>`).join(''); s.dataset.key = key; }
+        s.value = String(nearest(list, v));
+      });
+    });
+  }
+  function setAir(kind, index) {
+    const c = airChoices(), o = (kind === 'alt' ? c.alt : c.temp)[Number(index)];
+    if (!o) return;
+    if (kind === 'alt') { state.altFt = o.v; savePref('alt', String(o.v)); } else { state.tempF = o.v; savePref('temp', String(o.v)); }
+    showAir();
+    refreshTable();
+  }
+  el.alt.addEventListener('change', () => setAir('alt', el.alt.value));
+  el.temp.addEventListener('change', () => setAir('temp', el.temp.value));
+  fe.alt.addEventListener('change', () => setAir('alt', fe.alt.value));
+  fe.temp.addEventListener('change', () => setAir('temp', fe.temp.value));
   // Table extent, remembered per firearm type.
   function setTable(max, step) {
     const t = state.table[state.mode];
@@ -1509,7 +1560,7 @@
       current: { name: suggestedName(), code: current, link: setupUrl(current) },
       setups: (readSaved() || []).map(s => ({ name: s.name, code: s.code, link: setupUrl(s.code) })),
       loads: state.loads.map(l => Object.assign({}, l)),
-      settings: { windMph: state.windMph, windClock: state.windClock, slopeDeg: state.slopeDeg, click: el.cClick.value, vitalIn: state.vitalIn, table: JSON.parse(JSON.stringify(state.table)) }
+      settings: { windMph: state.windMph, windClock: state.windClock, slopeDeg: state.slopeDeg, altFt: state.altFt, tempF: state.tempF, click: el.cClick.value, vitalIn: state.vitalIn, table: JSON.parse(JSON.stringify(state.table)) }
     };
   }
   function exportSetups() {
@@ -1537,6 +1588,8 @@
     if (typeof s.windMph === 'number' && s.windMph >= 0 && s.windMph < 100) settings.windMph = s.windMph;
     if (Number.isInteger(s.windClock) && s.windClock >= 1 && s.windClock <= 12) settings.windClock = s.windClock;
     if (Number.isInteger(s.slopeDeg) && Math.abs(s.slopeDeg) <= SLOPE_MAX && s.slopeDeg % 5 === 0) settings.slopeDeg = s.slopeDeg;
+    if (typeof s.altFt === 'number' && s.altFt >= 0 && s.altFt <= ALT_MAX_FT) settings.altFt = s.altFt;
+    if (typeof s.tempF === 'number' && s.tempF >= TEMP_MIN_F && s.tempF <= TEMP_MAX_F) settings.tempF = s.tempF;
     if (CLICK_VALUES.includes(s.click)) settings.click = s.click;
     if (typeof s.vitalIn === 'number' && s.vitalIn >= VITAL_MIN_IN && s.vitalIn <= VITAL_MAX_IN) settings.vitalIn = s.vitalIn;
     if (s.table && typeof s.table === 'object') {
@@ -1558,6 +1611,8 @@
     if (st.windMph != null) { state.windMph = st.windMph; savePref('wind', String(st.windMph)); }
     if (st.windClock != null) { state.windClock = st.windClock; savePref('windclock', String(st.windClock)); }
     if (st.slopeDeg != null) { state.slopeDeg = st.slopeDeg; savePref('slope', String(st.slopeDeg)); }
+    if (st.altFt != null) { state.altFt = st.altFt; savePref('alt', String(st.altFt)); }
+    if (st.tempF != null) { state.tempF = st.tempF; savePref('temp', String(st.tempF)); }
     if (st.table) Object.keys(st.table).forEach(mode => { state.table[mode] = st.table[mode]; savePref('table.' + mode, st.table[mode].max + ':' + st.table[mode].step); });
     if (st.click) { el.cClick.value = el.cardClick.value = st.click; savePref('click', st.click); }
     if (st.vitalIn != null) { state.vitalIn = st.vitalIn; savePref('vital', String(st.vitalIn)); }
@@ -1768,7 +1823,7 @@
     fe.click.value = el.cClick.value;
 
     // The holds at this range.
-    const p = BTS.trajectoryTable(r.vFps, r.bc, r.sightIn, r.angle, [yd], state.slopeDeg)[0];
+    const air = airNow(), p = BTS.trajectoryTable(r.vFps, r.bc, r.sightIn, r.angle, [yd], state.slopeDeg, air)[0];
     if (!p) { fe.elev.textContent = fe.wind.textContent = '–'; return; }
     const [unit, value] = el.cClick.value.split(':'), click = Number(value), uName = unit === 'mil' ? 'mil' : 'MOA', dig = unit === 'mil' ? 2 : 1;
     const len = inch => (metric() ? inch * BTS.CM_PER_INCH : inch).toFixed(1) + ' ' + u.h;
@@ -1793,15 +1848,17 @@
     const e = metric() ? BTS.energyFtLb(grains, p.v) * 1.35582 : BTS.energyFtLb(grains, p.v);
     fe.stats.textContent = `${Math.round(v).toLocaleString()} ${u.v} · ${Math.round(e).toLocaleString()} ${u.e} · ${p.t.toFixed(3)} s` +
       ` · ${el.cClick.selectedOptions[0] ? el.cClick.selectedOptions[0].textContent : ''}` +
-      (state.slopeDeg ? ` · ${slopeText(state.slopeDeg)}, line-of-sight range` : '');
-    const warn = r.vFps >= SOUND_FPS && p.v < SOUND_FPS ? 'Subsonic at this range: the bullet may destabilize, so confirm on paper.'
-      : r.vFps >= TRANSONIC_FPS && p.v < TRANSONIC_FPS ? 'Transonic at this range: expect more spread than the numbers suggest.' : '';
+      (state.slopeDeg ? ` · ${slopeText(state.slopeDeg)}, line-of-sight range` : '') + (air ? ` · ${airText()}` : '');
+    // Mach 1 and about Mach 1.2 in this air.
+    const sound = air ? SOUND_FPS * air.sound / BTS.ATMOSPHERE.soundFps : SOUND_FPS, transonic = TRANSONIC_FPS * sound / SOUND_FPS;
+    const warn = r.vFps >= sound && p.v < sound ? 'Subsonic at this range: the bullet may destabilize, so confirm on paper.'
+      : r.vFps >= transonic && p.v < transonic ? 'Transonic at this range: expect more spread than the numbers suggest.' : '';
     fe.warn.hidden = !warn;
     fe.warn.textContent = warn;
 
-    // Point-blank range for the current zero and vital zone (level ground).
+    // Point-blank range for the current zero and vital zone (level ground, in this air).
     const half = state.vitalIn / 2, zone = len(state.vitalIn).replace('.0 ', ' ');
-    const mine = BTS.pointBlankAt(r.vFps, r.bc, r.sightIn, r.angle, half, PBR_MAX_YD);
+    const mine = BTS.pointBlankAt(r.vFps, r.bc, r.sightIn, r.angle, half, PBR_MAX_YD, false, air);
     const end = mine.endYd == null ? null : Math.round(toDispDist(mine.endYd)), level = state.slopeDeg ? ' (level ground)' : '';
     const endTxt = end == null ? `past ${Math.round(toDispDist(PBR_MAX_YD))} ${u.d}` : `${end} ${u.d}`;
     if (mine.apexIn > half + 0.005) {

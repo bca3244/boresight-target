@@ -32,7 +32,7 @@ function set(d, id, value, ev = 'input') { const e = d.getElementById(id); e.val
 
 (async () => {
   await load('');
-  try { ['bts.saved', 'bts.loads', 'bts.view', 'bts.theme', 'bts.compare', 'bts.slope', 'bts.plot', 'bts.windclock', 'bts.table.rifle', 'bts.table.pistol', 'bts.table.shotgun'].forEach(k => frame.contentWindow.localStorage.removeItem(k)); } catch (e) { /* storage blocked */ }
+  try { ['bts.saved', 'bts.loads', 'bts.view', 'bts.theme', 'bts.compare', 'bts.slope', 'bts.alt', 'bts.temp', 'bts.plot', 'bts.windclock', 'bts.table.rifle', 'bts.table.pistol', 'bts.table.shotgun'].forEach(k => frame.contentWindow.localStorage.removeItem(k)); } catch (e) { /* storage blocked */ }
   await load('');   // again, so the chart starts from its default view
   const w = frame.contentWindow, d = frame.contentDocument;
   row('Install button stays hidden until the browser offers installing', 'hidden', d.getElementById('install').hidden ? 'hidden' : 'shown', d.getElementById('install').hidden);
@@ -587,7 +587,7 @@ function set(d, id, value, ev = 'input') { const e = d.getElementById(id); e.val
 
   // Field mode: range in, holds out, never changes the profile.
   {
-    try { ['bts.view', 'bts.field.rifle', 'bts.theme', 'bts.wind', 'bts.windclock', 'bts.slope', 'bts.click', 'bts.vital'].forEach(k => frame.contentWindow.localStorage.removeItem(k)); } catch (e) { /* storage blocked */ }
+    try { ['bts.view', 'bts.field.rifle', 'bts.theme', 'bts.wind', 'bts.windclock', 'bts.slope', 'bts.click', 'bts.vital', 'bts.alt', 'bts.temp'].forEach(k => frame.contentWindow.localStorage.removeItem(k)); } catch (e) { /* storage blocked */ }
     await load('');
     let d = frame.contentDocument, w = frame.contentWindow;
     row('Opens in Setup by default', 'setup shown, field hidden', (d.querySelector('main.layout').hidden ? 'setup hidden' : 'setup shown') + ', ' + (d.getElementById('field-view').hidden ? 'field hidden' : 'field shown'),
@@ -616,6 +616,29 @@ function set(d, id, value, ev = 'input') { const e = d.getElementById(id); e.val
     row('Wind plus is shared with the trajectory table', '1', d.getElementById('wind').value, d.getElementById('wind').value === '1');
     set(d, 'f-click', 'mil:0.1', 'change');
     row('Click size is shared with the range card', 'mil:0.1', d.getElementById('card-click').value, d.getElementById('card-click').value === 'mil:0.1');
+    {
+      // Altitude and temperature: standard air by default, shared with Setup, and the holds follow the thinner air.
+      row('Field starts in standard air', 'Sea level, 59 °F (standard)', sel2(d, 'f-alt') + ', ' + sel2(d, 'f-temp'), sel2(d, 'f-alt') === 'Sea level' && sel2(d, 'f-temp') === '59 °F (standard)');
+      d.querySelector('#f-presets button[data-range="300"]').click();
+      const stdClicks = parseInt(d.getElementById('f-elev').textContent, 10);
+      const i5000 = Array.from(d.getElementById('f-alt').options).findIndex(o => o.textContent === '5,000 ft');
+      set(d, 'f-alt', String(i5000), 'change');
+      const air = w.BTS.atmosphere(5000, 59), p2 = w.BTS.trajectoryTable(r.vFps, r.bc, r.sightIn, r.angle, [300], 0, air)[0];
+      const want2 = Math.round(Math.abs(w.BTS.angleOf(p2.y, 300, 'mil')) / 0.1);
+      row('At 5,000 ft the 300 yd hold uses the thinner air', want2 + ' UP (fewer than ' + stdClicks + ')', d.getElementById('f-elev').textContent,
+          d.getElementById('f-elev').textContent === want2 + ' UP' && want2 < stdClicks);
+      row('Altitude is shared with the trajectory table', '5,000 ft', sel2(d, 'alt'), sel2(d, 'alt') === '5,000 ft');
+      row('The trajectory table says which air it uses', 'Air at 5,000 ft, 59 °F…', d.getElementById('traj-hint').textContent, /Air at 5,000 ft, 59 °F, for a zero made in standard air/.test(d.getElementById('traj-hint').textContent));
+      let kept = null; try { kept = w.localStorage.getItem('bts.alt'); } catch (e) { kept = 'n/a'; }
+      row('Altitude is remembered', '5000', String(kept), kept === '5000' || kept === 'n/a');
+      const i95 = Array.from(d.getElementById('temp').options).findIndex(o => o.textContent === '95 °F');
+      set(d, 'temp', String(i95), 'change');
+      row('Temperature from Setup shows in Field', '95 °F', sel2(d, 'f-temp'), sel2(d, 'f-temp') === '95 °F');
+      set(d, 'f-alt', '0', 'change');
+      set(d, 'f-temp', String(Array.from(d.getElementById('f-temp').options).findIndex(o => o.textContent === '59 °F (standard)')), 'change');
+      row('Back in standard air the hold is as before', stdClicks + ' UP', d.getElementById('f-elev').textContent, parseInt(d.getElementById('f-elev').textContent, 10) === stdClicks);
+      d.getElementById('f-minus').click();   // back to 290, which a later check expects to be remembered
+    }
     row('Field doesn’t change the profile', before, w.BTS_APP.shareCode(), w.BTS_APP.shareCode() === before);
     const leaks = Array.from(d.querySelectorAll('[hidden]')).filter(e => getComputedStyle(e).display !== 'none').map(e => e.id || e.className || e.tagName);
     row('In Field, everything marked hidden is off the screen', 'none showing', leaks.length ? 'showing: ' + leaks.join(', ') : 'none showing', leaks.length === 0);
