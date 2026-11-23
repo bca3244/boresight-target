@@ -4,7 +4,7 @@ Formerly "Boresight Target Generator". The web address, saved setups, saved load
 
 A web page to boresight, sight in, dial and compare loads. It prints true-scale laser boresight and sight-in targets, and works out scope clicks, point-blank range and a trajectory table for your firearm, sight height, load and zero range. It runs entirely in the browser, works offline and can be installed as an app.
 
-Live at <https://bca3244.github.io/boresight-target/>. The page has three views (tabs at the top, or at the bottom on a phone): **Setup**, **Field** and **Compare**.
+Live at <https://bca3244.github.io/firearm-sight-in-ballistics-calculator/>. The page has three views (tabs at the top, or at the bottom on a phone): **Setup**, **Field** and **Compare**.
 
 ## Setup
 

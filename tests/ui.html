@@ -545,7 +545,7 @@ function set(d, id, value, ev = 'input') { const e = d.getElementById(id); e.val
 
   // QR codes on every printed sheet decode to a link that opens this setup (the defaults here).
   // Opened from disk, the link points at the published site.
-  const base = location.protocol === 'file:' ? 'https://bca3244.github.io/boresight-target/' : new URL('../index.html', location.href).href.replace(/index\.html$/, '');
+  const base = location.protocol === 'file:' ? frame.contentWindow.BTS_APP.PUBLIC_URL : new URL('../index.html', location.href).href.replace(/index\.html$/, '');
   for (const kind of ['target', 'report', 'sightin']) {
     await load('#preview-' + kind);
     let got = 'no QR';

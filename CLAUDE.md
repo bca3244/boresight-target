@@ -1,6 +1,6 @@
 # Firearm Sight-In & Ballistics Calculator
 
-A static, offline-capable web app (formerly "Boresight Target Generator"; repo and GitHub Pages: `bca3244/boresight-target`) for boresighting, sighting in and comparing loads. It is modeled on Dexadine's SiteLite BTS, but the code and data are its own. The owner is a hunter; the main rifle is a 350 Legend.
+A static, offline-capable web app (formerly "Boresight Target Generator"; repo `bca3244/firearm-sight-in-ballistics-calculator`, renamed from `boresight-target`; GitHub Pages at <https://bca3244.github.io/firearm-sight-in-ballistics-calculator/>) for boresighting, sighting in and comparing loads. It is modeled on Dexadine's SiteLite BTS, but the code and data are its own. The owner is a hunter; the main rifle is a 350 Legend.
 
 ## Layout
 
@@ -19,6 +19,7 @@ A static, offline-capable web app (formerly "Boresight Target Generator"; repo a
 
 - **State and storage:** per-viewer preferences go in localStorage under `bts.*`, via `loadPref` and `savePref`, wrapped in try/catch. Reset all settings clears every `bts.*` key except `bts.saved` and `bts.loads`. New preferences must survive storage being blocked.
 - **Share links:** `#2…` is the Setup share code (see `SHARE_RE` and `shareCode()`/`applyShareCode()`). Keep it backward compatible; old `#1…` links still load. `#compare=` is base64url JSON for a comparison.
+- **Paths:** everything is relative (`./`, `sw.js`, `manifest.webmanifest`), so the site works at any path. The one absolute URL is `PUBLIC_URL` in `app.js`, used for QR codes on sheets printed from a file opened on disk and in the setups file. Update it if the repo is renamed again.
 - **Units:** internal values are yards, inches, fps, grains and ft-lb. Convert only for display (`metric()`, `toDispDist`/`fromDispDist`, `trajectoryUnits()`).
 - **Visibility:** elements hidden with the `hidden` attribute must not be shown by CSS. A test checks this. If a rule sets `display`, add a matching `[hidden] { display: none; }`.
 - **Grids:** in grid layouts use `minmax(0, 1fr)`, not `1fr`, or long select text makes the page scroll sideways on phones. Check that `document.documentElement.scrollWidth === innerWidth` at 390px wide on all three tabs.
