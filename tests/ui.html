@@ -756,6 +756,24 @@ function set(d, id, value, ev = 'input') { const e = d.getElementById(id); e.val
     try { ['bts.view', 'bts.compare'].forEach(k => frame.contentWindow.localStorage.removeItem(k)); } catch (e) { /* storage blocked */ }
   }
 
+  {
+    // Phone width (390 px): no sideways scroll, and every visible control on each tab is at least 44 px tall for a finger.
+    frame.style.width = '390px'; frame.style.height = '844px';
+    await wait(150);
+    const d = frame.contentDocument, w = frame.contentWindow;
+    for (const view of ['setup', 'field', 'compare']) {
+      d.querySelector(`[data-view="${view}"]`).click();
+      await wait(100);
+      const small = Array.from(d.querySelectorAll('main:not([hidden]) button, main:not([hidden]) select, main:not([hidden]) input:not([type=checkbox]):not([type=radio]), .view-tabs button'))
+        .filter(e => e.offsetParent !== null && e.getBoundingClientRect().height < 43.5).map(e => e.id || e.className || e.textContent.trim().slice(0, 20));
+      row(`At phone width, ${view} controls are at least 44 px tall`, 'none smaller', small.length ? small.join(', ') : 'none smaller', !small.length);
+      row(`At phone width, ${view} doesn't scroll sideways`, String(w.innerWidth), String(d.documentElement.scrollWidth), d.documentElement.scrollWidth === w.innerWidth);
+    }
+    d.querySelector('[data-view="setup"]').click();
+    try { w.localStorage.removeItem('bts.view'); } catch (e) { /* storage blocked */ }
+    frame.style.width = ''; frame.style.height = '';
+  }
+
   document.getElementById('summary').textContent = `${pass} passed, ${fail} failed`;
   document.title = `UI ${pass} passed ${fail} failed`;
 })();

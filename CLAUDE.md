@@ -23,6 +23,7 @@ A static, offline-capable web app (GitHub Pages: `bca3244/boresight-target`) for
 - **Visibility:** elements hidden with the `hidden` attribute must not be shown by CSS. A test checks this. If a rule sets `display`, add a matching `[hidden] { display: none; }`.
 - **Grids:** in grid layouts use `minmax(0, 1fr)`, not `1fr`, or long select text makes the page scroll sideways on phones. Check that `document.documentElement.scrollWidth === innerWidth` at 390px wide on all three tabs.
 - **Accessibility:** every visible control needs a name (label, `aria-label` or `title`). A test checks this.
+- **Touch targets:** under 520px every visible control is at least 44px tall (rules at the end of the 520px block in `styles.css`). A UI test checks this and sideways scroll at 390px on all three tabs.
 - **Copy:** plain, specific, sentence case. No exclamation marks.
 - **Charts:** hand-built SVG, with colors from CSS variables (`screenColors()`). Print sheets use fixed light colors.
 

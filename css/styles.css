@@ -260,6 +260,7 @@ table.data .tag { display: inline-block; margin-left: 6px; padding: 1px 7px; bor
 #traj-card .chart-head .muted { font-size: 13.5px; }
 .traj-tools { display: flex; align-items: flex-end; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
 .traj-tools .t-field { flex: 0 0 116px; }
+.traj-tools .t-wide { flex-basis: 190px; }
 .traj-tools #print-card { margin-left: auto; }
 .traj-hint { margin: 8px 0 0; }
 .traj-tools .card-click-field { flex-basis: 170px; }
@@ -494,6 +495,18 @@ body.in-field .foot { display: none; }
   .f-out { grid-template-columns: 1fr; }
   .presets { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .f-cond-row { grid-template-columns: minmax(0, 1fr); }
+  /* Fingers, not a mouse: every control at least 44 px tall (Apple's minimum touch target; WCAG 2.5.5). */
+  select, input[type="number"], .search input, .saved-row input[type="text"], .load-form input[type="text"],
+  .btn, .btn.small, .paper select, .cmp-side .cmp-from select, .set-row select { height: 44px; }
+  .settings-btn { width: 44px; height: 44px; }
+  .segmented button, .segmented.small button { min-height: 44px; }
+  .fold-btn, .icon-btn, .saved-row .icon-btn { width: 44px; height: 44px; }
+  .link { min-height: 44px; }
+  .load-tools .link { padding: 0; }
+  /* The profile chip wraps instead of cutting off the velocity. */
+  .chip { flex-wrap: wrap; row-gap: 2px; }
+  .chip-name { max-width: 100%; white-space: normal; }
+  .chip-sub { white-space: normal; }
 }
 @media print { .view-tabs { display: none !important; } }
 
