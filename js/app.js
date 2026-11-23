@@ -1027,7 +1027,7 @@
   }
 
   // Link to this exact setup for the QR codes. Opened from disk, the code points at the published site instead.
-  const PUBLIC_URL = 'https://bca3244.github.io/boresight-target/';
+  const PUBLIC_URL = 'https://bca3244.github.io/firearm-sight-in-ballistics-calculator/';
   function setupUrl(code) {
     const base = /^https?:$/.test(location.protocol) ? location.origin + location.pathname.replace(/index\.html$/, '') : PUBLIC_URL;
     return base + '#' + (code || shareCode());
@@ -2646,5 +2646,5 @@
   });
   window.addEventListener('appinstalled', () => { installBtn.hidden = true; });
 
-  window.BTS_APP = { state, render, print, shareCode };
+  window.BTS_APP = { state, render, print, shareCode, PUBLIC_URL };
 })();
