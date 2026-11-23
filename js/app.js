@@ -6,7 +6,7 @@
   const el = {
     caliber: $('caliber'), caliberLabel: $('caliber-label'), sight: $('sight'), weight: $('weight'), shape: $('shape'),
     velocity: $('velocity'), velocityUnit: $('velocity-unit'), bc: $('bc'), resetLoad: $('reset-load'), loadNote: $('load-note'),
-    zero: $('zero'), target: $('target'), meet: $('meet'), meetUnit: $('meet-unit'), offset: $('offset'),
+    sightPreset: $('sight-preset'), zero: $('zero'), zeroAlt: $('zero-alt'), zeroTemp: $('zero-temp'), target: $('target'), meet: $('meet'), meetUnit: $('meet-unit'), offset: $('offset'),
     error: $('error'), solution: $('solution'), chart: $('chart'), paper: $('paper'),
     printTarget: $('print-target'), printReport: $('print-report'), printRoot: $('print-root'),
     maxRise: $('max-rise'), chartCard: document.querySelector('.chart-card'), chartZoom: $('chart-zoom'), how: $('how'),
@@ -54,7 +54,7 @@
   const SLOPE_MAX = 60;
   function slopePref() { const v = parseInt(loadPref('slope', '0'), 10); return Math.abs(v) <= SLOPE_MAX && v % 5 === 0 ? v : 0; }
   function slopeText(deg) { return deg ? Math.abs(deg) + '° ' + (deg > 0 ? 'uphill' : 'downhill') : 'level'; }
-  // Air where you shoot, for the trajectory table, range card and Field (the zero is solved in standard air):
+  // Air where you shoot, for the trajectory table, range card and Field (the zero is solved in the zero air below):
   // altitude kept in feet and temperature in °F whatever the units. Sea level at 59 °F is the standard atmosphere.
   const ALT_MAX_FT = 12000, TEMP_MIN_F = -40, TEMP_MAX_F = 120, STD_TEMP_F = 59, FT_PER_M = 1 / 0.3048;
   function altPref() { const v = parseFloat(loadPref('alt', '')); return v >= 0 && v <= ALT_MAX_FT ? v : 0; }
@@ -91,6 +91,8 @@
     slopeDeg: slopePref(),  // shot angle in degrees, + uphill
     altFt: altPref(),       // altitude where you shoot, feet
     tempF: tempPref(),      // air temperature where you shoot, °F
+    zeroAltFt: 0,           // altitude where the rifle was zeroed, feet (part of the setup and its link)
+    zeroTempF: STD_TEMP_F,  // air temperature where the rifle was zeroed, °F
     table: tablePrefs(),    // trajectory table extent per firearm: { max, step } in the displayed distance unit
     loads: [],           // my loads (every firearm type), see normLoad(); read from storage below, once their limits exist
     linkLoad: null,      // a load opened from a link that isn't in my loads
@@ -99,10 +101,20 @@
   const metric = () => state.units === 'metric';
   // The air for the table, card and Field, or null for the standard atmosphere (so standard results stay exactly as before).
   function airNow() { return state.altFt || state.tempF !== STD_TEMP_F ? BTS.atmosphere(state.altFt, state.tempF) : null; }
+  // The air the zero was made in, or null for the standard atmosphere.
+  function airZero() { return state.zeroAltFt || state.zeroTempF !== STD_TEMP_F ? BTS.atmosphere(state.zeroAltFt, state.zeroTempF) : null; }
   const altLabel = ft => metric() ? (ft ? Math.round(ft / FT_PER_M).toLocaleString() + ' m' : 'Sea level') : (ft ? Math.round(ft).toLocaleString() + ' ft' : 'Sea level');
   const tempLabel = f => metric() ? Math.round((f - 32) * 5 / 9) + ' °C' : Math.round(f) + ' °F';
   // '5,000 ft, 41 °F' when the air isn't standard, else ''.
-  function airText() { return airNow() ? `${altLabel(state.altFt).replace('Sea level', 'sea level')}, ${tempLabel(state.tempF)}` : ''; }
+  function airText() { return airNow() ? airLabel(state.altFt, state.tempF) : ''; }
+  // '5,000 ft, 41 °F' for the zero air, else ''.
+  function zeroAirText() { return airZero() ? airLabel(state.zeroAltFt, state.zeroTempF) : ''; }
+  function airLabel(ft, f) { return `${altLabel(ft).replace('Sea level', 'sea level')}, ${tempLabel(f)}`; }
+  // The model line for sheets and hints: which air the zero and the table use.
+  function airModelText() {
+    const z = airZero() ? `zeroed at ${zeroAirText()}` : 'zeroed in standard air (59 °F, 29.53 inHg)';
+    return airNow() ? `${z}; table at ${airText()}` : airZero() ? `${z}; table in standard air` : 'standard atmosphere (59 °F, 29.53 inHg)';
+  }
 
   // ---------- Select helpers ----------
 
@@ -219,6 +231,34 @@
     state.lists.sights = sights;
     const target = keepInches == null ? DEFAULTS[state.mode].sightIn : keepInches;
     fill(el.sight, sights, s => s.label, nearestIndex(sights, target, s => s.inches));
+    showSightPreset();
+  }
+
+  // Common rifle mount heights, bore center to sight center. Rules of thumb, not measurements: about 1.5 in is the usual
+  // bolt-gun default in load manuals and ballistic programs; AR-15 figures add an AR-15 optic mount's height above the rail
+  // (1.5, 1.93, 2.26 in are common) to about 1.1 in from the bore to the top of the rail. Iron sights sit about 2.6 in up.
+  const SIGHT_PRESETS = [
+    { inches: 1.5, label: 'Bolt gun, low rings (about 1.5 in)' },
+    { inches: 1.8, label: 'Bolt gun, medium rings (about 1.8 in)' },
+    { inches: 2.0, label: 'Bolt gun, high rings (about 2.0 in)' },
+    { inches: 2.6, label: 'AR-15, iron sights or 1.5 in mount (about 2.6 in)' },
+    { inches: 3.0, label: 'AR-15, 1.93 in mount (about 3.0 in)' },
+    { inches: 3.4, label: 'AR-15, 2.26 in mount (about 3.4 in)' }
+  ];
+  // Rifles only. The preset list shows the mount that matches the chosen height, or "Measured or other".
+  function showSightPreset() {
+    const p = el.sightPreset, rifle = state.mode === 'rifle';
+    p.hidden = !rifle;
+    if (!rifle) return;
+    if (p.dataset.key !== state.units) {
+      const len = i => metric() ? (i * BTS.CM_PER_INCH).toFixed(1) + ' cm' : i.toFixed(1) + ' in';
+      p.innerHTML = '<option value="">Common mounts: measured or other</option>' +
+        SIGHT_PRESETS.map((o, i) => `<option value="${i}">${metric() ? o.label.replace(/about [\d.]+ in\)$/, 'about ' + len(o.inches) + ')') : o.label}</option>`).join('');
+      p.dataset.key = state.units;
+    }
+    const cur = state.lists.sights[idx(el.sight)];
+    const i = cur ? SIGHT_PRESETS.findIndex(o => Math.abs(o.inches - cur.inches) < 0.03) : -1;
+    p.value = i < 0 ? '' : String(i);
   }
 
   // The weight a new choice of caliber starts on: the row's common weight, or the middle of its typical range
@@ -393,7 +433,7 @@
     else if (!(state.bc >= 0.01 && state.bc <= 2)) r.error = 'Enter a ballistic coefficient between 0.010 and 2.000.';
     else {
       r.loadOk = true;
-      const sol = BTS.solve(state.vFps, state.bc, sightIn, zeroYd);
+      const zAir = airZero(), sol = BTS.solve(state.vFps, state.bc, sightIn, zeroYd, zAir);
       if (sol.rising || !isFinite(sol.meetYd) || sol.meetYd <= 0) {
         r.error = '<strong>This load can’t be zeroed this close to the muzzle.</strong> The bullet is still rising near ' +
           zero + (metric() ? ' m' : ' yd') + '. Choose a longer zero range.';
@@ -402,13 +442,13 @@
         r.meetYd = sol.meetYd;
         r.meet = metric() ? sol.meetYd * BTS.METERS_PER_YARD : sol.meetYd;
         // Highest point of the bullet above the sight line on the way to the zero.
-        const top = BTS.trajectory(state.vFps, state.bc, sightIn, sol.angle, zeroYd, zeroYd / 600)
+        const top = BTS.trajectory(state.vFps, state.bc, sightIn, sol.angle, zeroYd, zeroYd / 600, zAir)
           .reduce((a, p) => (p.y > a.y ? p : a), { x: 0, y: -Infinity });
         r.rise = {
           x: metric() ? top.x * BTS.METERS_PER_YARD : top.x,
           y: Math.max(0, metric() ? top.y * BTS.CM_PER_INCH : top.y)
         };
-        const nz = BTS.nearZero(state.vFps, state.bc, sightIn, sol.angle, zeroYd);
+        const nz = BTS.nearZero(state.vFps, state.bc, sightIn, sol.angle, zeroYd, zAir);
         r.nearZero = nz == null ? null : (metric() ? nz * BTS.METERS_PER_YARD : nz);
         r.table = trajectoryRows(sol.angle, sightIn, zero, zeroYd);
       }
@@ -500,7 +540,7 @@
     el.trajNote.textContent = (r.nearZero != null ? `Near zero ${r.nearZero.toFixed(1)} ${u.d} · ` : '') + `Max rise ${riseText(r.rise)}` + (state.slopeDeg ? ' (level ground)' : '');
     el.trajHint.textContent = (state.tableCut ? `Showing the first ${TABLE_ROWS} ranges; choose a longer step to see farther. ` : '') +
       (state.slopeDeg ? `Shooting ${slopeText(state.slopeDeg)}: ranges are line-of-sight distances (what a rangefinder reads), for a zero made on level ground. ` : '') +
-      (airNow() ? `Air at ${airText()}, for a zero made in standard air (sea level, 59 °F). ` : '') +
+      (airNow() || airZero() ? `Air at ${airText() || 'sea level, 59 °F'}, for a zero made at ${zeroAirText() || 'sea level, 59 °F'}. ` : '') +
       'MOA and mil are from the line of sight. 3 and 9 o\'clock winds push the bullet the most; 12 and 6 o\'clock winds don\'t push it sideways.';
     renderCard();
   }
@@ -524,7 +564,7 @@
     const half = state.vitalIn / 2, halfText = len(half).toFixed(1) + ' ' + u.l;
     el.pbrUnit.textContent = u.l;
     if (document.activeElement !== el.pbrZone) el.pbrZone.value = String(vitalDisplay());
-    const best = BTS.pointBlank(r.vFps, r.bc, r.sightIn, half, PBR_MAX_YD);
+    const best = BTS.pointBlank(r.vFps, r.bc, r.sightIn, half, PBR_MAX_YD, airZero());
     const $t = (id, text) => { document.getElementById(id).textContent = text; };
     $t('pbr-best', span(best));
     $t('pbr-best-sub', `Highest point +${halfText} at ${Math.round(dist(best.apexYd))} ${u.d}`);
@@ -533,7 +573,7 @@
     $t('pbr-zero-sub', best.nearZeroYd != null ? `Also crosses the sight line at ${Math.round(dist(best.nearZeroYd))} ${u.d}` : '');
     // The chosen zero: within the zone only if its highest point stays inside it.
     if (r.angle != null) {
-      const mine = BTS.pointBlankAt(r.vFps, r.bc, r.sightIn, r.angle, half, PBR_MAX_YD);
+      const mine = BTS.pointBlankAt(r.vFps, r.bc, r.sightIn, r.angle, half, PBR_MAX_YD, false, airZero());
       const over = mine.apexIn > half + 0.005;
       $t('pbr-yours', over ? 'Rises too high' : span(mine));
       $t('pbr-yours-sub', over ? `Your ${r.zero} ${u.d} zero rises ${len(mine.apexIn).toFixed(1)} ${u.l} at ${Math.round(dist(mine.apexYd))} ${u.d}, above the zone`
@@ -557,7 +597,7 @@
     el.pbrHint.textContent = `Aim dead-on and the bullet stays within ±${halfText} of your aim point (half the vital zone). ` +
       (pick == null ? `The best zero is closer than the shortest zero choice (${zeros[0]} ${u.d}).`
         : Math.abs(pick - bestZero) < 0.5 ? '' : `Zero choices go in ${steps} ${u.d} steps, so ${pick} ${u.d} is the closest one that doesn’t rise above the zone. `) +
-      'Standard atmosphere; confirm on paper.';
+      (airZero() ? `In the air you zeroed in (${zeroAirText()}); confirm on paper.` : 'Standard atmosphere; confirm on paper.');
   }
 
   // Shows the crosswind and table extent in the current units (the wind is stored in mph).
@@ -679,7 +719,7 @@
   //   b + 2+2+2   optional: barrel length and test barrel length (tenths of an inch), change per inch (fps)
   //   c + 3+3+3   optional: one of my loads (the caliber, weight and shape positions are then 0): weight in tenths
   //               of a grain, velocity (fps) and B.C. x 1000, then ~ and the load's name (URL-encoded)
-  const SHARE_RE = /^#([12])([0-9a-n])([0-9a-z]{2})([0-9a-z]{2})([0-9a-z]{2})([0-9a-z])([0-9a-z])([0-9a-z]{2})(?:([0-9a-z]{3})([0-9a-z]{3}))?(?:b([0-9a-z]{2})([0-9a-z]{2})([0-9a-z]{2}))?(?:c([0-9a-z]{3})([0-9a-z]{3})([0-9a-z]{3})(?:~([^#]{1,240}))?)?$/;
+  const SHARE_RE = /^#([12])([0-9a-n])([0-9a-z]{2})([0-9a-z]{2})([0-9a-z]{2})([0-9a-z])([0-9a-z])([0-9a-z]{2})(?:([0-9a-z]{3})([0-9a-z]{3}))?(?:b([0-9a-z]{2})([0-9a-z]{2})([0-9a-z]{2}))?(?:z([0-9a-z]{4}))?(?:c([0-9a-z]{3})([0-9a-z]{3})([0-9a-z]{3})(?:~([^#]{1,240}))?)?$/;
   let urlReady = false;   // no URL writes while the page is still starting up
   const b36 = (n, len) => Math.max(0, Math.round(n)).toString(36).padStart(len, '0').slice(-len);
 
@@ -694,6 +734,7 @@
     }
     const b = state.barrel;
     if (b && b.on && b.len != null && state.mode !== 'shotgun') code += 'b' + b36(b.len * 10, 2) + b36(b.ref * 10, 2) + b36(b.rate, 2);
+    if (airZero()) code += 'z' + b36(state.zeroAltFt / 10, 2) + b36(state.zeroTempF - TEMP_MIN_F, 2);
     if (load) code += 'c' + b36(load.grains * 10, 3) + b36(load.fps, 3) + b36(load.bc * 1000, 3) + '~' + encodeURIComponent(load.name);
     return code;
   }
@@ -715,11 +756,18 @@
     try { return decodeURIComponent(s); } catch (e) { return s; }
   }
 
+  // The zero air in a link: 'z' + altitude in tens of feet (2) + °F above TEMP_MIN_F (2), both base 36. Absent: standard air.
+  function zeroAirFromCode(z) {
+    if (!z) return { altFt: 0, tempF: STD_TEMP_F };
+    const alt = parseInt(z.slice(0, 2), 36) * 10, t = parseInt(z.slice(2), 36) + TEMP_MIN_F;
+    return { altFt: Math.min(ALT_MAX_FT, alt), tempF: Math.min(TEMP_MAX_F, t) };
+  }
+
   // Restores settings from a link. Returns false (and changes nothing) if the hash isn't a settings code.
   function applyShareCode(hash) {
     const full = hash.match(SHARE_RE);
     if (!full) return false;
-    const version = full[1], m = full.slice(1);   // m[1..9] are the fields after the version
+    const version = full[1], m = full.slice(1);   // m[1..] are the fields after the version; m[13] is the zero air, m[14..17] the load
     const n = s => parseInt(s, 36);
     const flags = n(m[1]), mode = BTS.MODES[flags >> 3];
     if (!mode) return false;
@@ -733,12 +781,15 @@
     setPressed('[data-units]', 'data-units', state.units);
     setPressed('[data-plot]', 'data-plot', state.plot);
     // A load in the link: use the saved one that matches it, or list it as "(from link)".
-    const linked = m[13] ? normLoad({ name: decodeName(m[16]) || 'Load from link', mode, grains: n(m[13]) / 10, fps: n(m[14]), bc: n(m[15]) / 1000 }) : null;
+    const linked = m[14] ? normLoad({ name: decodeName(m[17]) || 'Load from link', mode, grains: n(m[14]) / 10, fps: n(m[15]), bc: n(m[16]) / 1000 }) : null;
+    const za = zeroAirFromCode(m[13]);
+    state.zeroAltFt = za.altFt; state.zeroTempF = za.tempF;
+    showAir();
     const saved = linked && state.loads.find(l => sameLoad(l, linked));
     state.linkLoad = linked && !saved ? linked : null;
     buildCalibers(null);
     if (linked) selectLoad(saved || state.linkLoad); else pick(el.caliber, n(m[2]));
-    buildSights(null); pick(el.sight, n(m[3]));
+    buildSights(null); pick(el.sight, n(m[3])); showSightPreset();
     buildWeights(null);
     if (version === '1') {
       // Version-1 links point into a coarser weight list; find the same weight in today's list.
@@ -806,7 +857,7 @@
     const xMaxYd = state.plot === 'near'
       ? Math.max(r.meetYd * 1.6, (t.meet ? 0 : t.range / toDisp) * 1.15, 3)
       : r.zeroYd * 1.12;
-    const pts = BTS.trajectory(r.vFps, r.bc, r.sightIn, r.angle, xMaxYd, xMaxYd / 240)
+    const pts = BTS.trajectory(r.vFps, r.bc, r.sightIn, r.angle, xMaxYd, xMaxYd / 240, airZero())
       .map(p => ({ x: p.x * toDisp, y: p.y * yScale }));
     const h = r.sightIn * yScale, meet = r.meet;
     return { pts, h, meet, rise: r.rise, xMax: xMaxYd * toDisp, target: t, yScale,
@@ -921,6 +972,7 @@
       ['G1 B.C.', r.bc.toFixed(3) + (state.custom || currentLoad() ? '' : ' (typical)')],
       ['Zero range', r.zero + ' ' + unitD],
       ...(state.slopeDeg ? [['Shot angle', slopeText(state.slopeDeg) + ' (table only)']] : []),
+      ...(airZero() ? [['Zeroed at', zeroAirText()]] : []),
       ...(airNow() ? [['Air', airText() + ' (table only)']] : []),
       ['Meet distance', r.meet.toFixed(1) + ' ' + unitD],
       ['Maximum rise', riseText(r.rise)],
@@ -1104,7 +1156,7 @@
         cells.forEach((t, i) => { g += `<text x="${i === 0 ? gx + 0.03 : gx + cx[i]}" y="${y}" text-anchor="${i === 0 ? 'start' : 'end'}" font-size="${fs}"${row.zero ? ' font-weight="700"' : ''}>${t}</text>`; });
       });
     }
-    g += `<text x="${tx}" y="${y0 + CH - pad + 0.02}" font-size="0.07" fill="#666">U/D = dial up/down, L/R = dial left/right. Standard atmosphere; confirm with live fire.</text>`;
+    g += `<text x="${tx}" y="${y0 + CH - pad + 0.02}" font-size="0.07" fill="#666">U/D = dial up/down, L/R = dial left/right. ${airZero() ? 'Zeroed at ' + esc(zeroAirText()) : 'Standard atmosphere'}; confirm with live fire.</text>`;
     return { g, x0, y0, w: CW, h: CH };
   }
 
@@ -1132,7 +1184,7 @@
     const traj = `<table class="report-traj${r.table.length > 24 ? ' dense' : ''}">${trajectoryHead(u, true)}` +
       r.table.map(row => `<tr${row.zero ? ' class="zero-row"' : ''}><td>${row.range}${row.zero ? ' (zero)' : ''}</td>${trajectoryCells(row, '')}</tr>`).join('') + '</table>';
     const unitD = u.d;
-    const footer = `<footer>G1 point-mass model, standard atmosphere (59 °F, 29.53 inHg)${airNow() ? `; trajectory table at ${esc(airText())}` : ''}. Printed ${esc(new Date().toLocaleString())}. Confirm your zero with live fire.</footer>`;
+    const footer = `<footer>G1 point-mass model, ${esc(airModelText())}. Printed ${esc(new Date().toLocaleString())}. Confirm your zero with live fire.</footer>`;
     const page2 = !second ? '' : `<div class="sheet report" style="width:${paper.w}in;height:${paper.h}in">
       <header><div><h1>Boresight Report · trajectory</h1><p>${esc(caliberName())} · zeroed at ${r.zero} ${unitD} · ${esc(state.lists.weights[idx(el.weight)].label)} ${esc(state.lists.shapes[idx(el.shape)].label)}</p></div></header>
       ${traj}
@@ -1266,8 +1318,9 @@
   function showAir() {
     const c = airChoices(), key = state.units;
     const nearest = (list, v) => list.reduce((b, o, i) => Math.abs(o.v - v) < Math.abs(list[b].v - v) - 1e-9 ? i : b, 0);
-    [[el.alt, fe.alt, c.alt, state.altFt], [el.temp, fe.temp, c.temp, state.tempF]].forEach(([a, b, list, v]) => {
-      [a, b].forEach(s => {
+    [[[el.alt, fe.alt], c.alt, state.altFt], [[el.temp, fe.temp], c.temp, state.tempF],
+      [[el.zeroAlt], c.alt, state.zeroAltFt], [[el.zeroTemp], c.temp, state.zeroTempF]].forEach(([sels, list, v]) => {
+      sels.forEach(s => {
         if (s.dataset.key !== key) { s.innerHTML = list.map((o, i) => `<option value="${i}">${o.t}</option>`).join(''); s.dataset.key = key; }
         s.value = String(nearest(list, v));
       });
@@ -1280,6 +1333,16 @@
     showAir();
     refreshTable();
   }
+  // Zero air is part of the setup (it travels in the link), so it re-solves the zero.
+  function setZeroAir(kind, index) {
+    const c = airChoices(), o = (kind === 'alt' ? c.alt : c.temp)[Number(index)];
+    if (!o) return;
+    if (kind === 'alt') state.zeroAltFt = o.v; else state.zeroTempF = o.v;
+    showAir();
+    render(keepTargetValue());
+  }
+  el.zeroAlt.addEventListener('change', () => setZeroAir('alt', el.zeroAlt.value));
+  el.zeroTemp.addEventListener('change', () => setZeroAir('temp', el.zeroTemp.value));
   el.alt.addEventListener('change', () => setAir('alt', el.alt.value));
   el.temp.addEventListener('change', () => setAir('temp', el.temp.value));
   fe.alt.addEventListener('change', () => setAir('alt', fe.alt.value));
@@ -1463,7 +1526,14 @@
     toast(`Deleted “${load.name}”`);
   });
 
-  el.sight.addEventListener('change', () => render(keepTargetValue()));
+  el.sight.addEventListener('change', () => { showSightPreset(); render(keepTargetValue()); });
+  el.sightPreset.addEventListener('change', () => {
+    const o = SIGHT_PRESETS[Number(el.sightPreset.value)];
+    if (!el.sightPreset.value || !o) return;
+    el.sight.value = String(nearestIndex(state.lists.sights, o.inches, s => s.inches));
+    showSightPreset();
+    render(keepTargetValue());
+  });
   el.weight.addEventListener('change', () => { setTypicalLoad(); render(keepTargetValue()); });
   el.shape.addEventListener('change', () => { setTypicalLoad(); render(keepTargetValue()); });
   el.zero.addEventListener('change', () => { delete el.cRange.dataset.edited; render(keepTargetValue()); });
@@ -1848,7 +1918,7 @@
     const e = metric() ? BTS.energyFtLb(grains, p.v) * 1.35582 : BTS.energyFtLb(grains, p.v);
     fe.stats.textContent = `${Math.round(v).toLocaleString()} ${u.v} · ${Math.round(e).toLocaleString()} ${u.e} · ${p.t.toFixed(3)} s` +
       ` · ${el.cClick.selectedOptions[0] ? el.cClick.selectedOptions[0].textContent : ''}` +
-      (state.slopeDeg ? ` · ${slopeText(state.slopeDeg)}, line-of-sight range` : '') + (air ? ` · ${airText()}` : '');
+      (state.slopeDeg ? ` · ${slopeText(state.slopeDeg)}, line-of-sight range` : '') + (air ? ` · ${airText()}` : '') + (airZero() ? ` · zeroed at ${zeroAirText()}` : '');
     // Mach 1 and about Mach 1.2 in this air.
     const sound = air ? SOUND_FPS * air.sound / BTS.ATMOSPHERE.soundFps : SOUND_FPS, transonic = TRANSONIC_FPS * sound / SOUND_FPS;
     const warn = r.vFps >= sound && p.v < sound ? 'Subsonic at this range: the bullet may destabilize, so confirm on paper.'
@@ -2019,8 +2089,8 @@
     if (!mode) return null;
     const sights = BTS.sightHeights(mode, met), sg = sights[Math.min(n(m[3]), sights.length - 1)];
     const out = { mode, sightIn: sg.inches, custom: false };
-    if (m[13]) {
-      const linked = normLoad({ name: decodeName(m[16]) || 'Load from link', mode, grains: n(m[13]) / 10, fps: n(m[14]), bc: n(m[15]) / 1000 });
+    if (m[14]) {
+      const linked = normLoad({ name: decodeName(m[17]) || 'Load from link', mode, grains: n(m[14]) / 10, fps: n(m[15]), bc: n(m[16]) / 1000 });
       if (!linked) return null;
       const saved = modeLoads(mode).find(l => sameLoad(l, linked)) || Object.assign(linked, { adhoc: true });
       if (saved.adhoc) out.adhoc = saved;

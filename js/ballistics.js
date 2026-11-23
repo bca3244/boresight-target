@@ -74,8 +74,8 @@
     }
   }
 
-  // Height (ft) above the bore's starting point and vertical speed at exactly xFt.
-  function stateAt(v0, bc, angle, xFt) {
+  // Height (ft) above the bore's starting point and vertical speed at exactly xFt, in atmo (or standard air).
+  function stateAt(v0, bc, angle, xFt, atmo) {
     let px = 0, py = 0, pvy = 0, out = null;
     fly(v0, bc, angle, xFt, (x, y, vy) => {
       if (out) return;
@@ -84,29 +84,30 @@
         out = { y: py + f * (y - py), vy: pvy + f * (vy - pvy) };
       }
       px = x; py = y; pvy = vy;
-    });
+    }, 0, atmo);
     return out || { y: py, vy: pvy };
   }
 
   // Solve the bore angle that puts the bullet on the sight line at the zero range.
   // Returns the meet distance (where the laser, which follows the bore, crosses the sight line) and
   // whether the zero is valid: a zero too close to the top of the arc is refused.
-  function solve(v0, bc, sightIn, zeroYd) {
+  // atmo (from atmosphere()) is the air where the rifle was zeroed; without it, the standard atmosphere.
+  function solve(v0, bc, sightIn, zeroYd, atmo) {
     const h = sightIn / 12, z = zeroYd * 3;
     let angle = 0, state = null;
     for (let i = 0; i < 30; i++) {
-      state = stateAt(v0, bc, angle, z);
+      state = stateAt(v0, bc, angle, z, atmo);
       const miss = state.y - h;
       angle -= miss / z;
       if (Math.abs(miss) < 1e-7) break;
     }
     // Still rising at APEX_LIMIT of the zero range means the top of the arc is too close to the zero.
-    const tooNear = stateAt(v0, bc, angle, z * APEX_LIMIT).vy >= 0;
+    const tooNear = stateAt(v0, bc, angle, z * APEX_LIMIT, atmo).vy >= 0;
     return { angle, meetYd: h / Math.tan(angle) / 3, rising: tooNear };
   }
 
-  // Bullet path relative to the sight line (inches), sampled every stepYd out to maxYd.
-  function trajectory(v0, bc, sightIn, angle, maxYd, stepYd) {
+  // Bullet path relative to the sight line (inches), sampled every stepYd out to maxYd, in atmo (or standard air).
+  function trajectory(v0, bc, sightIn, angle, maxYd, stepYd, atmo) {
     const pts = [];
     let next = 0, px = 0, py = 0;
     fly(v0, bc, angle, maxYd * 3 + 1, (x, y) => {
@@ -116,14 +117,14 @@
         next += stepYd;
       }
       px = x; py = y;
-    });
+    }, 0, atmo);
     return pts;
   }
 
   // Height (in, relative to the sight line), speed (fps) and time of flight (s) at each range in rangesYd.
   // With slopeDeg the ranges are line-of-sight distances (what a rangefinder reads) up or down that angle,
-  // for a rifle zeroed on level ground at `angle`. With atmo (from atmosphere()) the bullet flies in that air, for a
-  // rifle zeroed in the standard atmosphere at `angle`.
+  // for a rifle zeroed on level ground at `angle`. With atmo (from atmosphere()) the bullet flies in that air; `angle`
+  // already carries the air the rifle was zeroed in (see solve()).
   function trajectoryTable(v0, bc, sightIn, angle, rangesYd, slopeDeg, atmo) {
     const want = rangesYd.slice().sort((a, b) => a - b), out = [];
     let i = 0, p = null;
@@ -150,8 +151,8 @@
   }
 
   // First range (yd) where the rising bullet crosses the sight line, or null if it never does before the zero.
-  function nearZero(v0, bc, sightIn, angle, zeroYd) {
-    const pts = trajectory(v0, bc, sightIn, angle, zeroYd, zeroYd / 2000);
+  function nearZero(v0, bc, sightIn, angle, zeroYd, atmo) {
+    const pts = trajectory(v0, bc, sightIn, angle, zeroYd, zeroYd / 2000, atmo);
     for (let i = 1; i < pts.length; i++) {
       if (pts[i - 1].y < 0 && pts[i].y >= 0) {
         const a = pts[i - 1], b = pts[i];
@@ -189,15 +190,16 @@
   // Maximum point-blank range: the bore angle whose highest point is exactly radiusIn above the sight line,
   // so the bullet stays inside a vital zone of 2 x radiusIn for the longest distance. The best zero is where
   // that path comes back down through the sight line.
-  function pointBlank(v0, bc, sightIn, radiusIn, maxYd = 2000) {
-    const apexOf = a => pointBlankAt(v0, bc, sightIn, a, radiusIn, maxYd, true);
+  // atmo (from atmosphere()) finds it in that air; without it, the standard atmosphere.
+  function pointBlank(v0, bc, sightIn, radiusIn, maxYd = 2000, atmo) {
+    const apexOf = a => pointBlankAt(v0, bc, sightIn, a, radiusIn, maxYd, true, atmo);
     let lo = 0, hi = 0.002;
     for (let i = 0; i < 20 && apexOf(hi).apexIn < radiusIn; i++) { lo = hi; hi *= 2; }
     for (let i = 0; i < 40; i++) {
       const mid = (lo + hi) / 2;
       if (apexOf(mid).apexIn < radiusIn) lo = mid; else hi = mid;
     }
-    return Object.assign({ angle: lo }, pointBlankAt(v0, bc, sightIn, lo, radiusIn, maxYd));
+    return Object.assign({ angle: lo }, pointBlankAt(v0, bc, sightIn, lo, radiusIn, maxYd, false, atmo));
   }
 
   // Scope adjustment for a group that landed offsetIn inches from the aim point at rangeYd yards.
