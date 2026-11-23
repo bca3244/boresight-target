@@ -38,6 +38,8 @@ python3 -m http.server 8765
 #   http://localhost:8765/tests/ui.html     the page in an iframe: lists, setups, table, Field, Compare
 ```
 
+Or run all three headless: `node tests/run.js` (add `--offline` in a sandbox without network). GitHub Actions runs `node tests/run.js` on every PR and push to `main` (`.github/workflows/tests.yml`); keep it green.
+
 Each page writes `N passed, M failed` into `#summary`. Six QR checks in `ui.html` load the jsQR decoder from a CDN, so they fail in a sandbox without network. That is expected; everything else should pass. Add UI tests for new behavior to `tests/ui.html`, in the block for that tab.
 
 Before shipping a visual change, take Playwright screenshots of the affected tab at 1366×900 and at iPhone 13 size, and look at them. Playwright is preinstalled in Claude's cloud sessions.
