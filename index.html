@@ -187,11 +187,19 @@
         </div>
       </div>
 
-      <label class="field">
-        <span class="field-label"><span class="step">3</span>Sight height</span>
-        <select id="sight"></select>
+      <div class="field">
+        <label class="field-label" for="sight"><span class="step">3</span>Sight height</label>
+        <div class="sight-pick">
+          <select id="sight"></select>
+          <select id="sight-preset" aria-label="Common mount heights" title="Common mount heights (estimates; measure yours for best results)"></select>
+        </div>
         <span class="hint">Center of the bore to the center of the scope, or to the top of the front sight.</span>
-      </label>
+        <details class="sight-help">
+          <summary>How sight height changes the path</summary>
+          <p>A taller sight starts the bullet farther below your line of sight. Inside the zero it hits lower at close range and crosses the line of sight later; past the zero the difference is small. Being off by a quarter inch matters most for close shots and for the boresight target itself.</p>
+          <p>The common mounts are rules of thumb, not measurements. To measure: half the bolt diameter, plus the gap from the top of the bolt to the bottom of the scope, plus half the scope tube (0.5 in for a 1 in tube, 0.59 in for 30 mm).</p>
+        </details>
+      </div>
 
       <div class="field-row">
         <label class="field">
@@ -240,6 +248,15 @@
         <select id="zero"></select>
         <span class="hint">Where the bullet should hit the center of the target.</span>
       </label>
+
+      <div class="field">
+        <span class="field-label">Zeroed in</span>
+        <div class="zero-air">
+          <label class="mini"><span>Altitude</span><select id="zero-alt" title="Altitude where you zeroed the rifle"></select></label>
+          <label class="mini"><span>Temperature</span><select id="zero-temp" title="Air temperature where you zeroed the rifle"></select></label>
+        </div>
+        <span class="hint">The air where you sighted in. Holds for other air (set under the trajectory table and in Field) are worked out from this zero.</span>
+      </div>
     </section>
     </div>
 
@@ -359,7 +376,7 @@
           </label>
           <label class="mini t-field">
             <span>Altitude</span>
-            <select id="alt" title="Altitude where you shoot (the zero is for standard air)"></select>
+            <select id="alt" title="Altitude where you shoot (the zero uses the air you zeroed in)"></select>
           </label>
           <label class="mini t-field t-wide">
             <span>Temperature</span>
@@ -638,7 +655,7 @@
   </main>
 
   <footer class="foot">
-    <p>Calculations use a G1 point-mass model in standard atmosphere (59&nbsp;°F, 29.53&nbsp;inHg). Altitude and temperature change the air for the trajectory table, range card and Field holds; the zero is for standard air. Typical velocities and ballistic coefficients are estimates; enter your own values for best results.</p>
+    <p>Calculations use a G1 point-mass model in standard atmosphere (59&nbsp;°F, 29.53&nbsp;inHg). Altitude and temperature change the air for the trajectory table, range card and Field holds; the zero uses the air you set under “Zeroed in” (standard air by default). Typical velocities and ballistic coefficients are estimates; enter your own values for best results.</p>
   </footer>
 </div>
 

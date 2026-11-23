@@ -395,6 +395,24 @@ row('Sight cutoff: 1.5 in starts at 8', 8, BTS.targetRanges(1.5, 44.9)[0], BTS.t
   row('Point-blank range reaches farther in thin air', 'longer', `${pbHi.endYd.toFixed(0)} vs ${pbStd.endYd.toFixed(0)} yd`, pbHi.endYd > pbStd.endYd);
 }
 
+// Zero conditions: a rifle zeroed in one air and shot in another. Zeroed at 5,000 ft and shot at 5,000 ft it is on at the
+// zero again; zeroed at 5,000 ft and shot at sea level it hits low past the zero (denser air, more drop).
+{
+  const hiAir = BTS.atmosphere(5000, 41.17), R = [100, 200, 300];
+  const std = BTS.solve(2314, 0.225, 1.5, 100), stdAgain = BTS.solve(2314, 0.225, 1.5, 100, BTS.atmosphere());
+  row('Zero in standard air matches the default solve', std.angle.toExponential(6), stdAgain.angle.toExponential(6), Math.abs(std.angle - stdAgain.angle) < 1e-12);
+  const z = BTS.solve(2314, 0.225, 1.5, 200, hiAir);
+  const there = BTS.trajectoryTable(2314, 0.225, 1.5, z.angle, R, 0, hiAir);
+  row('Zeroed at 5,000 ft, shot at 5,000 ft: on at the 200 yd zero', '0.00 in', there[1].y.toFixed(3) + ' in', Math.abs(there[1].y) < 0.005);
+  const home = BTS.trajectoryTable(2314, 0.225, 1.5, z.angle, R);
+  row('Zeroed at 5,000 ft, shot at sea level: low at 300 yd', 'lower than at 5,000 ft', `${home[2].y.toFixed(2)} vs ${there[2].y.toFixed(2)} in`, home[2].y < there[2].y - 0.5);
+  row('A zero in thin air needs less bore angle', 'smaller', `${z.angle.toExponential(4)} < ${BTS.solve(2314, 0.225, 1.5, 200).angle.toExponential(4)}`, z.angle < BTS.solve(2314, 0.225, 1.5, 200).angle);
+  const pb = BTS.pointBlank(2314, 0.225, 1.5, 3, 1000), pbHi = BTS.pointBlank(2314, 0.225, 1.5, 3, 1000, hiAir);
+  row('Best point-blank zero is farther in thin air', 'farther', `${pbHi.farZeroYd.toFixed(0)} vs ${pb.farZeroYd.toFixed(0)} yd`, pbHi.farZeroYd > pb.farZeroYd);
+  const nz = BTS.nearZero(2314, 0.225, 1.5, z.angle, 200, hiAir), tr = BTS.trajectory(2314, 0.225, 1.5, z.angle, 200, 50, hiAir);
+  row('Path in the zero air crosses the line at the zero', '0.00 in at 200 yd', tr[4].y.toFixed(3) + ' in; near zero ' + (nz && nz.toFixed(1)), Math.abs(tr[4].y) < 0.01 && nz > 0 && nz < 200);
+}
+
 document.getElementById('summary').textContent = `${pass} passed, ${fail} failed`;
 document.title = `TESTS ${pass} passed ${fail} failed`;
 </script>

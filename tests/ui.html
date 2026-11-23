@@ -595,6 +595,47 @@ function set(d, id, value, ev = 'input') { const e = d.getElementById(id); e.val
     w.location.hash = '';
   }
 
+  // Zero conditions and sight height presets (Setup).
+  {
+    try { ['bts.alt', 'bts.temp'].forEach(k => frame.contentWindow.localStorage.removeItem(k)); } catch (e) { /* storage blocked */ }
+    await load('');
+    let d = frame.contentDocument, w = frame.contentWindow;
+    const plain = w.BTS_APP.shareCode();
+    row('Zero air starts at sea level, 59 °F', 'Sea level, 59 °F (standard)', sel2(d, 'zero-alt') + ', ' + sel2(d, 'zero-temp'), sel2(d, 'zero-alt') === 'Sea level' && sel2(d, 'zero-temp') === '59 °F (standard)');
+    row('Standard zero air adds nothing to the link', '12 characters', plain, plain.length === 12);
+    const meetStd = d.getElementById('meet').textContent;
+    const i5000 = Array.from(d.getElementById('zero-alt').options).findIndex(o => o.textContent === '5,000 ft');
+    set(d, 'zero-alt', String(i5000), 'change');
+    const code = w.BTS_APP.shareCode();
+    row('Zero air goes in the link', '…z…', code, /z[0-9a-z]{4}$/.test(code));
+    const r = w.BTS_APP.state.result, air = w.BTS.atmosphere(5000, 59);
+    const atZero = w.BTS.trajectoryTable(r.vFps, r.bc, r.sightIn, r.angle, [r.zeroYd], 0, air)[0];
+    row('Zeroed at 5,000 ft: on at the zero in that air', '0.00 in', atZero.y.toFixed(3), Math.abs(atZero.y) < 0.01);
+    row('Zero air changes the meet distance', 'not ' + meetStd, d.getElementById('meet').textContent, d.getElementById('meet').textContent !== meetStd);
+    row('The table says where you zeroed', '…zero made at 5,000 ft, 59 °F', d.getElementById('traj-hint').textContent, /Air at sea level, 59 °F, for a zero made at 5,000 ft, 59 °F/.test(d.getElementById('traj-hint').textContent));
+    const p300 = w.BTS.trajectoryTable(r.vFps, r.bc, r.sightIn, r.angle, [300], 0)[0];
+    const pz = w.BTS.trajectoryTable(r.vFps, r.bc, r.sightIn, r.angle, [300], 0, air)[0];
+    row('Zeroed up high, shot at sea level: lower at 300 yd', 'lower', `${p300.y.toFixed(2)} vs ${pz.y.toFixed(2)} in`, p300.y < pz.y);
+    await load('#' + code);
+    d = frame.contentDocument; w = frame.contentWindow;
+    row('A link brings the zero air back', '5,000 ft', sel2(d, 'zero-alt'), sel2(d, 'zero-alt') === '5,000 ft' && w.BTS_APP.shareCode() === code);
+    await load('#' + plain);
+    d = frame.contentDocument; w = frame.contentWindow;
+    row('An older link opens in standard zero air', 'Sea level', sel2(d, 'zero-alt'), sel2(d, 'zero-alt') === 'Sea level');
+    // Sight height presets: rifles only, they set the height, and a manual height shows "measured or other".
+    const presets = Array.from(d.getElementById('sight-preset').options).map(o => o.textContent);
+    row('Rifle sight presets include AR-15 and bolt-gun mounts', 'AR-15 …, Bolt gun …', presets.length + ' options', presets.some(t => /^AR-15/.test(t)) && presets.some(t => /^Bolt gun/.test(t)));
+    row('1.5 in sight shows the low-rings preset', 'Bolt gun, low rings…', sel2(d, 'sight-preset'), /low rings/.test(sel2(d, 'sight-preset')));
+    const iAr = presets.findIndex(t => /1\.93 in mount/.test(t));
+    set(d, 'sight-preset', String(iAr - 1), 'change');
+    row('Picking the AR-15 1.93 in mount sets 3.0 in', '3.0 in', sel2(d, 'sight'), /^3\.0 in/.test(sel2(d, 'sight')));
+    set(d, 'sight', String(Number(d.getElementById('sight').value) + 1), 'change');
+    row('A height off the presets shows measured or other', 'Common mounts: measured or other', sel2(d, 'sight-preset'), /measured or other/.test(sel2(d, 'sight-preset')));
+    d.querySelector('[data-mode="pistol"]').click();
+    row('Pistols have no mount presets', 'hidden', d.getElementById('sight-preset').hidden ? 'hidden' : 'shown', d.getElementById('sight-preset').hidden);
+    d.querySelector('[data-mode="rifle"]').click();
+  }
+
   // Field mode: range in, holds out, never changes the profile.
   {
     try { ['bts.view', 'bts.field.rifle', 'bts.theme', 'bts.wind', 'bts.windclock', 'bts.slope', 'bts.click', 'bts.vital', 'bts.alt', 'bts.temp'].forEach(k => frame.contentWindow.localStorage.removeItem(k)); } catch (e) { /* storage blocked */ }
@@ -638,7 +679,7 @@ function set(d, id, value, ev = 'input') { const e = d.getElementById(id); e.val
       row('At 5,000 ft the 300 yd hold uses the thinner air', want2 + ' UP (fewer than ' + stdClicks + ')', d.getElementById('f-elev').textContent,
           d.getElementById('f-elev').textContent === want2 + ' UP' && want2 < stdClicks);
       row('Altitude is shared with the trajectory table', '5,000 ft', sel2(d, 'alt'), sel2(d, 'alt') === '5,000 ft');
-      row('The trajectory table says which air it uses', 'Air at 5,000 ft, 59 °F…', d.getElementById('traj-hint').textContent, /Air at 5,000 ft, 59 °F, for a zero made in standard air/.test(d.getElementById('traj-hint').textContent));
+      row('The trajectory table says which air it uses', 'Air at 5,000 ft, 59 °F…', d.getElementById('traj-hint').textContent, /Air at 5,000 ft, 59 °F, for a zero made at sea level, 59 °F/.test(d.getElementById('traj-hint').textContent));
       let kept = null; try { kept = w.localStorage.getItem('bts.alt'); } catch (e) { kept = 'n/a'; }
       row('Altitude is remembered', '5000', String(kept), kept === '5000' || kept === 'n/a');
       const i95 = Array.from(d.getElementById('temp').options).findIndex(o => o.textContent === '95 °F');
