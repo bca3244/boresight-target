@@ -1,4 +1,4 @@
-// Boresight Target Generator: ballistics engine and the rules that build each dropdown list.
+// Firearm Sight-In & Ballistics Calculator: ballistics engine and the rules that build each dropdown list.
 // No page code lives here, so tests/test.html can load it on its own.
 (function () {
   'use strict';

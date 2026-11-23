@@ -1,6 +1,6 @@
-# Boresight Target Generator
+# Firearm Sight-In & Ballistics Calculator
 
-A static, offline-capable web app (GitHub Pages: `bca3244/boresight-target`) for boresighting, sighting in and comparing loads. It is modeled on Dexadine's SiteLite BTS, but the code and data are its own. The owner is a hunter; the main rifle is a 350 Legend.
+A static, offline-capable web app (formerly "Boresight Target Generator"; repo and GitHub Pages: `bca3244/boresight-target`) for boresighting, sighting in and comparing loads. It is modeled on Dexadine's SiteLite BTS, but the code and data are its own. The owner is a hunter; the main rifle is a 350 Legend.
 
 ## Layout
 

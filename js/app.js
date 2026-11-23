@@ -1,4 +1,4 @@
-// Boresight Target Generator: page logic. Lists and ballistics come from ballistics.js (window.BTS).
+// Firearm Sight-In & Ballistics Calculator: page logic. Lists and ballistics come from ballistics.js (window.BTS).
 (function () {
   'use strict';
 
@@ -1186,14 +1186,14 @@
     const unitD = u.d;
     const footer = `<footer>G1 point-mass model, ${esc(airModelText())}. Printed ${esc(new Date().toLocaleString())}. Confirm your zero with live fire.</footer>`;
     const page2 = !second ? '' : `<div class="sheet report" style="width:${paper.w}in;height:${paper.h}in">
-      <header><div><h1>Boresight Report · trajectory</h1><p>${esc(caliberName())} · zeroed at ${r.zero} ${unitD} · ${esc(state.lists.weights[idx(el.weight)].label)} ${esc(state.lists.shapes[idx(el.shape)].label)}</p></div></header>
+      <header><div><h1>Sight-In &amp; Ballistics Report · trajectory</h1><p>${esc(caliberName())} · zeroed at ${r.zero} ${unitD} · ${esc(state.lists.weights[idx(el.weight)].label)} ${esc(state.lists.shapes[idx(el.shape)].label)}</p></div></header>
       ${traj}
       <p class="report-note">MOA and mil are from the line of sight. Drift is for ${esc(windText(u))}.${state.slopeDeg ? " Shot angle " + slopeText(state.slopeDeg) + "; ranges are line-of-sight distances." : ""}</p>
       ${footer}
     </div>`;
     return `<div class="sheet report" style="width:${paper.w}in;height:${paper.h}in">
       <header><svg viewBox="0 0 32 32" width="34" height="34"><circle cx="16" cy="16" r="11" fill="none" stroke="#0f9d8a" stroke-width="2.5"/><path d="M16 1v8M16 23v8M1 16h8M23 16h8" stroke="#0f9d8a" stroke-width="2.5"/><circle cx="16" cy="16" r="3" fill="#e0283d"/></svg>
-      <div><h1>Boresight Report</h1><p>${esc(caliberName())} · zeroed at ${r.zero} ${unitD}</p></div>
+      <div><h1>Sight-In &amp; Ballistics Report</h1><p>${esc(caliberName())} · zeroed at ${r.zero} ${unitD}</p></div>
       <div class="report-qr"><span>Scan to open<br>this setup</span><svg viewBox="0 0 1 1" width="0.8in" height="0.8in">${qrCode(0, 0, 1)}</svg></div></header>
       <p class="report-meet">Line of sight and laser beam meet at <strong>${r.meet.toFixed(1)} ${unitD}</strong></p>
       <div class="report-chart">${chart}</div>
@@ -1625,7 +1625,7 @@
   function setupsFile() {
     const current = shareCode();
     return {
-      format: FILE_FORMAT, version: FILE_VERSION, app: 'Boresight Target Generator', site: PUBLIC_URL,
+      format: FILE_FORMAT, version: FILE_VERSION, app: 'Firearm Sight-In & Ballistics Calculator', site: PUBLIC_URL,
       saved: new Date().toISOString(),
       current: { name: suggestedName(), code: current, link: setupUrl(current) },
       setups: (readSaved() || []).map(s => ({ name: s.name, code: s.code, link: setupUrl(s.code) })),

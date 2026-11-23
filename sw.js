@@ -4,7 +4,7 @@
 // so a half-finished download can never mix new and old files. Open pages are then told a new version is ready.
 'use strict';
 
-const CACHE = 'bts-v2';
+const CACHE = 'bts-v3';
 const FILES = [
   './', 'index.html', 'manifest.webmanifest', 'css/styles.css',
   'js/vendor/qrcode.js', 'js/data.js', 'js/ballistics.js', 'js/app.js',
