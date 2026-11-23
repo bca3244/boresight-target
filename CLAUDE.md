@@ -13,7 +13,7 @@ A static, offline-capable web app (GitHub Pages: `bca3244/boresight-target`) for
 - `js/data.js`: caliber data (`window.BTS_DATA`). Each row is `[name, diameter in, min gr, max gr, velocity a, b, form factors by shape, common gr]`.
 - `js/app.js`: all page code in one IIFE, split into sections marked `// ---------- Name ----------`: select helpers, My loads, list building, barrel length, solving, click calculator, rendering, shareable link, chart, printing, events, setups file, Field, Compare, Compare link and print, start, offline. It is exposed to tests as `window.BTS_APP`.
 - `js/vendor/qrcode.js`: QR generator, used for printed sheets.
-- `sw.js`: service worker, stale-while-revalidate. A new version shows on the visit after deploy. Add any new file to `FILES`.
+- `sw.js`: service worker. Answers from its copy; each page visit downloads every file in `FILES` in the background and swaps the copy all at once only if all succeeded and something changed, then the page shows a "new version is ready" bar with Reload. Add any new file to `FILES` (a UI test checks this).
 
 ## Conventions
 

@@ -38,6 +38,16 @@ function set(d, id, value, ev = 'input') { const e = d.getElementById(id); e.val
   row('Install button stays hidden until the browser offers installing', 'hidden', d.getElementById('install').hidden ? 'hidden' : 'shown', d.getElementById('install').hidden);
   row('Page links the app manifest and icon', 'manifest + apple-touch-icon', (d.querySelector('link[rel=manifest]') ? 'manifest' : 'no manifest') + (d.querySelector('link[rel=apple-touch-icon]') ? ' + apple-touch-icon' : ''),
       !!d.querySelector('link[rel=manifest]') && !!d.querySelector('link[rel=apple-touch-icon]'));
+  {
+    // The offline copy must hold every file the page loads, or the installed app breaks without a connection.
+    const sw = await (await fetch('../sw.js', { cache: 'no-store' })).text();
+    const files = JSON.parse('[' + sw.match(/const FILES = \[([^\]]*)\]/)[1].replace(/'/g, '"') + ']');
+    const used = Array.from(d.querySelectorAll('script[src], link[rel=stylesheet][href], link[rel=manifest], link[rel~=icon], link[rel=apple-touch-icon]'))
+      .map(e => e.getAttribute('src') || e.getAttribute('href')).filter(u => !/^((https?:)?\/\/|data:)/.test(u)).map(u => u.split(/[?#]/)[0].replace(/^\.\//, ''));
+    const missing = used.filter(u => !files.includes(u));
+    row('The offline copy lists every file the page loads', 'none missing', missing.length ? 'missing: ' + missing.join(', ') : 'none missing (' + used.length + ' files)', used.length > 3 && !missing.length);
+    row('The update notice starts hidden', 'hidden', d.getElementById('update-bar').hidden ? 'hidden' : 'shown', d.getElementById('update-bar').hidden);
+  }
   row('Chart opens on Full zero', 'full pressed', d.querySelector('[data-plot="full"]').getAttribute('aria-pressed') === 'true' ? 'full pressed' : 'near pressed',
       d.querySelector('[data-plot="full"]').getAttribute('aria-pressed') === 'true' && d.querySelector('[data-plot="near"]').getAttribute('aria-pressed') === 'false');
   const sel = id => d.getElementById(id).selectedOptions[0]?.textContent || '';

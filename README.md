@@ -25,6 +25,6 @@ Ballistics use a G1 point-mass model in the Army Standard Metro atmosphere (59 Â
 ## Files
 
 - `index.html`, `css/`, `js/`: the site. No build step or server code; open `index.html` directly or host the folder as-is.
-- `sw.js`, `manifest.webmanifest`, `icons/`: offline copy and app install. The service worker answers from its copy and refreshes it in the background, so a new version appears on the visit after it is published.
+- `sw.js`, `manifest.webmanifest`, `icons/`: offline copy and app install. The service worker answers from its copy and checks for a new version in the background on each visit; it switches only once every file has downloaded, then offers a Reload.
 - `js/vendor/qrcode.js`: [QR Code Generator](https://github.com/kazuhikoarase/qrcode-generator) 1.4.4 by Kazuhiko Arase (MIT license).
 - `tests/test.html`: engine checks. `tests/share.html`: shareable-link checks. `tests/ui.html`: caliber search, saved setups, click calculator, trajectory table, Field mode and Compare. Open any of them in a browser; the summary at the top shows the result. `node tests/run.js` runs all three in headless Chromium (Playwright), and GitHub Actions runs it on every pull request.

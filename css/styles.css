@@ -309,6 +309,15 @@ body.chart-open, body.card-open { overflow: hidden; }
   opacity: 0; pointer-events: none; transition: opacity 0.18s, transform 0.18s;
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
+/* A new version has downloaded in the background (see sw.js). */
+.update-bar {
+  position: fixed; left: 50%; bottom: 24px; z-index: 61; transform: translateX(-50%); max-width: calc(100vw - 32px);
+  display: flex; align-items: center; gap: 12px; padding: 8px 8px 8px 16px; border-radius: 12px;
+  background: var(--surface-3); border: 1px solid var(--border-strong); color: var(--text); font-weight: 600; font-size: 14px;
+  box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.8);
+}
+.update-bar[hidden] { display: none; }
+@media print { .update-bar { display: none !important; } }
 
 .foot { margin-top: 28px; color: var(--faint); font-size: 12.5px; text-align: center; }
 
@@ -481,7 +490,7 @@ body.in-field .foot { display: none; }
   }
   .view-tabs button { flex: 1; justify-content: center; min-height: 48px; font-size: 15px; }
   #app { padding-bottom: 96px; }
-  .toast { bottom: calc(84px + env(safe-area-inset-bottom)); }
+  .toast, .update-bar { bottom: calc(84px + env(safe-area-inset-bottom)); }
   .f-out { grid-template-columns: 1fr; }
   .presets { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .f-cond-row { grid-template-columns: minmax(0, 1fr); }

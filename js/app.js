@@ -2557,7 +2557,12 @@
 
   // ---------- Offline and install ----------
   // The service worker keeps a copy of the site for use without a connection (not available when opened from disk).
-  if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => {});
+  if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+    // The worker has stored a complete new version: offer a reload rather than switching under the user.
+    navigator.serviceWorker.addEventListener('message', e => { if (e.data && e.data.type === 'bts-updated') $('update-bar').hidden = false; });
+  }
+  $('update-reload').addEventListener('click', () => location.reload());
   // Browsers that offer installing (Chrome, Edge, Android) get an Install button; iOS uses Share > Add to Home Screen.
   const installBtn = $('install');
   let installPrompt = null;
