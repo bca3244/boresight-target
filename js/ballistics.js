@@ -23,6 +23,17 @@
   // (0.954 is accepted, 0.965 is refused).
   const APEX_LIMIT = 0.96;
 
+  // Air at the shooter's altitude and temperature, as { rho, sound } for fly(). Pressure follows the ICAO standard
+  // atmosphere's barometric formula for the altitude (station pressure, what a barometer there reads unadjusted);
+  // density scales with pressure over absolute temperature, and the speed of sound with the square root of absolute
+  // temperature. Humidity stays at the standard 78%. Sea level and 59 F give exactly the standard values above.
+  const T0_RANKINE = 518.67;
+  function pressureRatio(altFt) { return Math.pow(1 - 6.8756e-6 * altFt, 5.2559); }
+  function atmosphere(altFt, tempF) {
+    const alt = altFt || 0, t = tempF == null ? 59 : tempF, tR = t + 459.67;
+    return { altFt: alt, tempF: t, rho: RHO * pressureRatio(alt) * T0_RANKINE / tR, sound: SOUND * Math.sqrt(tR / T0_RANKINE) };
+  }
+
   // Rounds halves to the even neighbour (banker's rounding).
   function roundHalfEven(x) {
     const r = Math.round(x);
@@ -44,14 +55,16 @@
   // and stops once x passes maxFt (or when sample returns true). y is measured from the bore's starting point.
   // x runs along the line of sight; slopeDeg tilts that line up (+) or down (-), so gravity has a part along it
   // (slowing an uphill bullet) and only g x cos(slope) across it. Air density is the same at every angle.
-  function fly(v0, bc, angle, maxFt, sample, slopeDeg) {
-    const k = RHO * Math.PI / (8 * bc * 144), s = (slopeDeg || 0) * Math.PI / 180;
+  // atmo is { rho, sound } from atmosphere(); without it, the standard atmosphere.
+  function fly(v0, bc, angle, maxFt, sample, slopeDeg, atmo) {
+    const rho = atmo ? atmo.rho : RHO, sound = atmo ? atmo.sound : SOUND;
+    const k = rho * Math.PI / (8 * bc * 144), s = (slopeDeg || 0) * Math.PI / 180;
     const gAlong = GRAVITY * Math.sin(s), gAcross = GRAVITY * Math.cos(s);
     let x = 0, y = 0, t = 0, vx = v0 * Math.cos(angle), vy = v0 * Math.sin(angle);
     sample(0, 0, vy, vx, 0);
     while (x < maxFt && vx > 1) {
       const v = Math.sqrt(vx * vx + vy * vy);
-      const a = k * cdG1(v / SOUND) * v;
+      const a = k * cdG1(v / sound) * v;
       x += vx * DT;
       y += vy * DT;
       t += DT;
@@ -109,8 +122,9 @@
 
   // Height (in, relative to the sight line), speed (fps) and time of flight (s) at each range in rangesYd.
   // With slopeDeg the ranges are line-of-sight distances (what a rangefinder reads) up or down that angle,
-  // for a rifle zeroed on level ground at `angle`.
-  function trajectoryTable(v0, bc, sightIn, angle, rangesYd, slopeDeg) {
+  // for a rifle zeroed on level ground at `angle`. With atmo (from atmosphere()) the bullet flies in that air, for a
+  // rifle zeroed in the standard atmosphere at `angle`.
+  function trajectoryTable(v0, bc, sightIn, angle, rangesYd, slopeDeg, atmo) {
     const want = rangesYd.slice().sort((a, b) => a - b), out = [];
     let i = 0, p = null;
     fly(v0, bc, angle, want[want.length - 1] * 3 + 1, (x, y, vy, vx, t) => {
@@ -122,7 +136,7 @@
         i++;
       }
       p = cur;
-    }, slopeDeg);
+    }, slopeDeg, atmo);
     return out;
   }
 
@@ -150,7 +164,8 @@
   // Point-blank range for a bore angle: where the bullet stays within ±radiusIn of the sight line.
   // Returns { startYd, nearZeroYd, apexYd, apexIn, farZeroYd, endYd }; endYd is null if the bullet never drops
   // radiusIn below the line within maxYd, and startYd > 0 only when the sight sits more than radiusIn above the bore.
-  function pointBlankAt(v0, bc, sightIn, angle, radiusIn, maxYd, apexOnly) {
+  // atmo (from atmosphere()) flies the same bore angle in other air; without it, the standard atmosphere.
+  function pointBlankAt(v0, bc, sightIn, angle, radiusIn, maxYd, apexOnly, atmo) {
     const out = { startYd: null, nearZeroYd: null, apexYd: 0, apexIn: -sightIn, farZeroYd: null, endYd: null };
     let px = 0, py = -sightIn, done = false;
     const cross = (x, y, level) => (px + (level - py) / (y - py) * (x - px)) / 3;
@@ -166,7 +181,7 @@
         if (out.startYd !== null && py > -radiusIn && y <= -radiusIn) { out.endYd = cross(x, y, -radiusIn); done = true; }
       }
       px = x; py = y;
-    });
+    }, 0, atmo);
     if (out.startYd === null) out.startYd = 0;
     return out;
   }
@@ -330,7 +345,7 @@
 
   window.BTS = {
     roundHalfEven, solve, trajectory, trajectoryTable, nearZero, pointBlank, pointBlankAt, clicks, energyFtLb, laserOffset, windDriftIn, angleOf,
-    calibers, sightHeights, weights, v1Weights, shapes, typicalVelocityFps, typicalBc, zeroRanges, targetRanges,
+    atmosphere, calibers, sightHeights, weights, v1Weights, shapes, typicalVelocityFps, typicalBc, zeroRanges, targetRanges,
     MODES, GAUGES, SLUGS, CM_PER_INCH, METERS_PER_YARD,
     ATMOSPHERE: { densityLbFt3: RHO, soundFps: SOUND }
   };

@@ -373,6 +373,28 @@ row('Sight cutoff: 1.5 in starts at 8', 8, BTS.targetRanges(1.5, 44.9)[0], BTS.t
     row(`${g} ${oz} oz slug is near the factory ${fps} fps`, `${fps} ± 120`, v + ' fps', Math.abs(v - fps) <= 120);
   });
 
+// Altitude and temperature. Density and speed of sound against the U.S. Standard Atmosphere 1976 at 5,000 ft (1,524 m),
+// where the standard temperature is 41.2 F: density ratio 0.8617, speed of sound 334.4 m/s (1,097 fps).
+{
+  const std = BTS.atmosphere(), hi = BTS.atmosphere(5000, 41.17), hot = BTS.atmosphere(0, 95), cold = BTS.atmosphere(0, 0);
+  row('Sea level at 59 F is the standard atmosphere', '0.0751 lb/ft³, 1116.45 fps', std.rho.toFixed(4) + ' lb/ft³, ' + std.sound.toFixed(2) + ' fps',
+      Math.abs(std.rho - 0.0751) < 1e-9 && Math.abs(std.sound - 1116.45) < 1e-9);
+  const ratio = hi.rho / std.rho;
+  row('Density at 5,000 ft standard day (US Std Atm 0.8617)', '0.8617 ± 0.002', ratio.toFixed(4), Math.abs(ratio - 0.8617) <= 0.002);
+  row('Speed of sound at 41.2 F (US Std Atm 1,097 fps)', '1097 ± 1', hi.sound.toFixed(1), Math.abs(hi.sound - 1097.1) <= 1);
+  row('Hot air is thinner, cold air denser', 'hot < standard < cold', [hot.rho, std.rho, cold.rho].map(x => x.toFixed(4)).join(' < '), hot.rho < std.rho && std.rho < cold.rho);
+  // Same bore angle (zeroed in standard air), flown higher up: less drop, more speed. The standard atmosphere changes nothing.
+  const a = BTS.solve(2314, 0.225, 1.5, 100).angle, R = [100, 200, 300];
+  const base = BTS.trajectoryTable(2314, 0.225, 1.5, a, R), same = BTS.trajectoryTable(2314, 0.225, 1.5, a, R, 0, std);
+  const up = BTS.trajectoryTable(2314, 0.225, 1.5, a, R, 0, BTS.atmosphere(5000, 41.17));
+  row('Standard atmosphere matches the default path', base.map(p => p.y.toFixed(3)).join(', '), same.map(p => p.y.toFixed(3)).join(', '),
+      base.every((p, i) => Math.abs(p.y - same[i].y) < 1e-6 && Math.abs(p.v - same[i].v) < 1e-6));
+  row('350 Legend 150 gr at 5,000 ft drops less and keeps more speed at 300 yd', 'higher and faster', `${up[2].y.toFixed(1)} vs ${base[2].y.toFixed(1)} in, ${up[2].v.toFixed(0)} vs ${base[2].v.toFixed(0)} fps`,
+      up[2].y > base[2].y + 1 && up[2].v > base[2].v + 50);
+  const pbStd = BTS.pointBlankAt(2314, 0.225, 1.5, a, 3, 1000), pbHi = BTS.pointBlankAt(2314, 0.225, 1.5, a, 3, 1000, false, BTS.atmosphere(5000, 41.17));
+  row('Point-blank range reaches farther in thin air', 'longer', `${pbHi.endYd.toFixed(0)} vs ${pbStd.endYd.toFixed(0)} yd`, pbHi.endYd > pbStd.endYd);
+}
+
 document.getElementById('summary').textContent = `${pass} passed, ${fail} failed`;
 document.title = `TESTS ${pass} passed ${fail} failed`;
 </script>
