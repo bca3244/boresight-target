@@ -713,7 +713,7 @@
   //   2           format version (1 = links made before weights went to 1-grain steps)
   //   flags       firearm * 8 + metric * 4 + A4 * 2 + full-zero chart
   //   2 chars     caliber, sight height and weight (positions in their lists)
-  //   1 char      shape, then zero range
+  //   1 char      shape, then zero range (its position in BTS.zeroCodes, which keeps older links' zeros)
   //   2 chars     target range (0 = meet distance)
   //   3 + 3       optional: your own velocity (in the displayed unit) and B.C. x 1000
   //   b + 2+2+2   optional: barrel length and test barrel length (tenths of an inch), change per inch (fps)
@@ -728,7 +728,8 @@
     const target = state.result && !state.result.error ? idx(el.target) : 0;
     const load = currentLoad();
     let code = '2' + flags.toString(36) + b36(load ? 0 : idx(el.caliber), 2) + b36(idx(el.sight), 2) + b36(idx(el.weight), 2) +
-      b36(idx(el.shape), 1) + b36(idx(el.zero), 1) + b36(target, 2);
+      b36(idx(el.shape), 1) +
+      b36(BTS.zeroCodes(state.mode).indexOf(state.lists.zeros[idx(el.zero)]), 1) + b36(target, 2);
     if (state.custom && state.vFps > 0 && state.bc > 0) {
       code += b36(metric() ? state.vFps / FPS_PER_MPS : state.vFps, 3) + b36(state.bc * 1000, 3);
     }
@@ -797,7 +798,9 @@
       if (old) pick(el.weight, nearestIndex(state.lists.weights, old.grains, w => w.grains));
     } else pick(el.weight, Math.min(n(m[4]), el.weight.options.length - 1));   // a list's top can come down when data is corrected
     buildShapes(null); pick(el.shape, n(m[5]));
-    buildZeros(null); pick(el.zero, n(m[6]));
+    buildZeros(null);
+    const zi = state.lists.zeros.indexOf(BTS.zeroCodes(state.mode)[n(m[6])]);
+    if (zi >= 0) pick(el.zero, zi);
     resetBarrel();
     if (m[10]) state.barrel = { on: true, len: n(m[10]) / 10, ref: n(m[11]) / 10 || state.barrel.ref, rate: n(m[12]) };
     showBarrel();

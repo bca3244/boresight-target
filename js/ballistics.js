@@ -326,10 +326,18 @@
   }
 
   function zeroRanges(mode) {
-    const [a, b] = mode === 'rifle' ? [3, 12] : [1, 6];
+    const [a, b] = mode === 'rifle' ? [2, 12] : [1, 6];
     const out = [];
     for (let i = a; i <= b; i++) out.push(i * 25);
     return out;
+  }
+
+  // Zero ranges in share-code order. Links store the zero as a position in this list, so ranges added later go
+  // at the end and older links keep their zero (the rifle list started at 75 before 50 was added).
+  const ZEROS_ADDED = { rifle: [50] };
+  function zeroCodes(mode) {
+    const added = ZEROS_ADDED[mode] || [];
+    return zeroRanges(mode).filter(z => !added.includes(z)).concat(added);
   }
 
   // Whole-number target ranges (in the display unit) offered after the meet distance.
@@ -347,7 +355,7 @@
 
   window.BTS = {
     roundHalfEven, solve, trajectory, trajectoryTable, nearZero, pointBlank, pointBlankAt, clicks, energyFtLb, laserOffset, windDriftIn, angleOf,
-    atmosphere, calibers, sightHeights, weights, v1Weights, shapes, typicalVelocityFps, typicalBc, zeroRanges, targetRanges,
+    atmosphere, calibers, sightHeights, weights, v1Weights, shapes, typicalVelocityFps, typicalBc, zeroRanges, zeroCodes, targetRanges,
     MODES, GAUGES, SLUGS, CM_PER_INCH, METERS_PER_YARD,
     ATMOSPHERE: { densityLbFt3: RHO, soundFps: SOUND }
   };

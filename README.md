@@ -10,7 +10,7 @@ Live at <https://bca3244.github.io/firearm-sight-in-ballistics-calculator/>. The
 
 For the bench. Each card folds up (the page remembers which are folded), and "How to use it" gives the five boresighting steps.
 
-- **Firearm and load.** Pick a rifle (about 200 cartridges), pistol (about 50) or shotgun (12 and 20 gauge slug barrels, weights in ounces), then the caliber, bullet weight and shape, and the zero range. The caliber list has a search box.
+- **Firearm and load.** Pick a rifle (about 200 cartridges), pistol (about 50) or shotgun (12 and 20 gauge slug barrels, weights in ounces), then the caliber, bullet weight and shape, and the zero range (50 to 300 yd for rifles, 25 to 150 yd for pistols and shotguns). The caliber list has a search box.
 - **Your own loads.** Add a load with a name, bullet weight, muzzle velocity and G1 B.C. Your loads are listed first under Caliber (and found by the search), and can be edited or deleted. A link to a setup carries its load, so it opens on any device; a load from a link can be saved to your loads there.
 - **Barrel length.** Adjust the typical velocity for your barrel (test barrel length and change per inch are editable), or enter your own velocity and B.C.; "Use typical values" puts them back.
 - **Sight height.** For rifles, a common-mounts list fills in rule-of-thumb heights for bolt guns (low, medium and high rings: about 1.5, 1.8 and 2.0 in) and AR-15s (iron sights or a 1.5 in mount about 2.6 in; 1.93 in mount about 3.0 in; 2.26 in mount about 3.4 in). These are estimates, not measurements; "How sight height changes the path" explains the effect and how to measure your own.
