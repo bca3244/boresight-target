@@ -538,6 +538,34 @@ function set(d, id, value, ev = 'input') { const e = d.getElementById(id); e.val
     await load('');
   }
 
+  // 50 yd rifle zero: first in the list, and a subsonic 22 LR under a scope zeroes there.
+  {
+    await load('');
+    let d = frame.contentDocument;
+    const sel = id => d.getElementById(id).selectedOptions[0]?.textContent || '';
+    const zeros = Array.from(d.getElementById('zero').options).map(o => o.textContent);
+    row('Rifle zero list starts at 50 yd', '50 yd, 75 yd … 300 yd', zeros.slice(0, 2).join(', ') + ' … ' + zeros[zeros.length - 1], zeros[0] === '50 yd' && zeros[1] === '75 yd' && zeros[zeros.length - 1] === '300 yd');
+    set(d, 'caliber-search', '22 long rifle');
+    const opt = (id, t) => Array.from(d.getElementById(id).options).find(o => o.textContent === t)?.value;
+    set(d, 'weight', opt('weight', '40 gr'), 'change');
+    set(d, 'shape', opt('shape', 'Round Nose'), 'change');
+    set(d, 'velocity', '1050'); set(d, 'bc', '0.120');
+    set(d, 'zero', opt('zero', '50 yd'), 'change');
+    row('Subsonic 22 LR at a 50 yd zero solves', '22 Long Rifle, 50 yd, no error, near zero shown', `${sel('caliber')}, ${sel('zero')}, ${d.getElementById('error').hidden ? 'no error' : 'error'}, ${d.getElementById('traj-note').textContent}`,
+        sel('caliber') === '22 Long Rifle' && sel('zero') === '50 yd' && d.getElementById('error').hidden && /^Near zero 1\d\.\d yd/.test(d.getElementById('traj-note').textContent));
+    const zr = d.querySelector('#traj-table tr.zero-row td');
+    row('The table marks the 50 yd zero', '50 zero', zr ? zr.textContent : 'none', !!zr && /^50/.test(zr.textContent));
+    const link = frame.contentWindow.BTS_APP.shareCode();
+    await load('#' + link);
+    d = frame.contentDocument;
+    row('A 50 yd zero survives its link', '50 yd, same code', sel('zero') + ', ' + frame.contentWindow.BTS_APP.shareCode(), sel('zero') === '50 yd' && frame.contentWindow.BTS_APP.shareCode() === link);
+    // Clicks at 50 yd: 1 MOA is 0.52 in, so 1 in low is about 7.6 quarter-MOA clicks.
+    set(d, 'c-click', 'moa:0.25', 'change');
+    set(d, 'c-range', '50'); set(d, 'c-vert', '1'); set(d, 'c-vdir', 'low'); set(d, 'c-horiz', '0');
+    row('1 in low at 50 yd, 1/4 MOA clicks', '8 clicks UP', d.getElementById('c-elev').textContent, d.getElementById('c-elev').textContent === '8 clicks UP');
+    await load('');
+  }
+
   // Sight-in sheet renders.
   await load('#preview-sightin');
   const sheet = frame.contentDocument.querySelector('#print-root svg');

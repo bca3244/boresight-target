@@ -79,6 +79,19 @@ CASES.forEach(([mode, cal, wt, shape, sight, zero, vExp, bcExp, meetExp, offsets
   }
 });
 
+// 50 yd rifle zero: offered first, but added at the end of the share-code order so older links keep their zero.
+{
+  const zr = BTS.zeroRanges('rifle'), zc = BTS.zeroCodes('rifle');
+  row('Rifle zeros run 50 to 300 yd', '50…300', zr[0] + '…' + zr[zr.length - 1], zr[0] === 50 && zr[1] === 75 && zr[zr.length - 1] === 300);
+  row('Rifle share-code order keeps 75 first and puts 50 last', '75, 100 … 300, 50', zc.join(', '), zc[0] === 75 && zc[1] === 100 && zc[zc.length - 1] === 50 && zc.length === zr.length);
+  row('Pistol share-code order is unchanged', BTS.zeroRanges('pistol').join(), BTS.zeroCodes('pistol').join(), BTS.zeroCodes('pistol').join() === BTS.zeroRanges('pistol').join());
+  // Subsonic 22 LR (40 gr, 1,050 fps, G1 0.12) under a 1.5 in scope: coming back down at 50 yd, so a valid zero.
+  const sub = BTS.solve(1050, 0.12, 1.5, 50), nz = BTS.nearZero(1050, 0.12, 1.5, sub.angle, 50);
+  row('Subsonic 22 LR zeros at 50 yd', 'accepted, near zero 15–20 yd', (sub.rising ? 'refused' : 'accepted') + ', near zero ' + (nz && nz.toFixed(1)), !sub.rising && nz > 15 && nz < 20);
+  // 350 Legend 170 gr (2,171 fps, 0.255) under a 1.5 in scope is still rising at 50 yd, so it stays refused.
+  row('350 Legend 170 gr at 50 yd is still rising', 'refused', BTS.solve(2171, 0.255, 1.5, 50).rising ? 'refused' : 'accepted', BTS.solve(2171, 0.255, 1.5, 50).rising);
+}
+
 // The version-1 lists (kept for old links) must stay the same...
 LISTS.forEach(([mode, cal, first, step, last]) => {
   const list = BTS.v1Weights(mode, BTS.calibers(mode).indexOf(cal), false).map(w => w.grains);

@@ -36,7 +36,7 @@ function code(w, c) {
   if (c.weight === 'middle') c.weight = ws[Math.floor(ws.length / 2)].label;
   const wi = ws.findIndex(x => x.label === c.weight);
   const hi = B.shapes(mode, ci).findIndex(s => s.label === c.shape);
-  const zi = B.zeroRanges(mode).indexOf(c.zero);
+  const zi = B.zeroCodes(mode).indexOf(c.zero);   // links store the zero's position in the share-code order
   const flags = B.MODES.indexOf(mode) * 8 + (metric ? 4 : 0) + (c.a4 ? 2 : 0) + (c.full ? 1 : 0);
   let s = (c.v1 ? '#1' : '#2') + flags.toString(36) + b36(ci, 2) + b36(si, 2) + b36(wi, 2) + b36(hi, 1) + b36(zi, 1) + b36(c.target || 0, 2);
   if (c.v) s += b36(c.v, 3) + b36(c.bc * 1000, 3);
@@ -55,6 +55,7 @@ const CASES = [
   { name: 'Old version-1 link (300 WM 180 gr)', mode: 'rifle', caliber: '300 Winchester Mag', sight: 1.5, weight: '180 gr', shape: 'Pointed', zero: 150, meet: '35.7', v1: true },   // 2,960 fps, as above,
   // Zero air: 'z' + altitude in tens of feet (dw = 500, so 5,000 ft) + °F above -40 (28 = 80, so 40 °F).
   { name: 'Own load zeroed at 5,000 ft, 40 °F', mode: 'rifle', caliber: '223 Rem (5.56x45mm)', sight: 1.5, weight: '60 gr', shape: 'Boat-Tail', zero: 100, v: 3215, bc: 0.239, custom: true, z: 'zdw28', zAir: '5,000 ft, 40 °F' },
+  { name: '22 LR subsonic, 50 yd rifle zero', mode: 'rifle', caliber: '22 Long Rifle', sight: 1.5, weight: '40 gr', shape: 'Round Nose', zero: 50, v: 1050, bc: 0.12, custom: true, zeroLabel: '50 yd' },
   { name: 'Refused zero still round-trips', mode: 'pistol', caliber: '9mm Luger (9x19mm)', sight: 0.9, weight: '124 gr', shape: 'Round Nose', zero: 25, error: true }
 ];
 
@@ -82,14 +83,24 @@ const CASES = [
     row(c.name + ': weight / shape', c.weight + ' / ' + c.shape, sel('weight') + ' / ' + sel('shape'), sel('weight') === c.weight && sel('shape') === c.shape);
     if (c.meet) row(c.name + ': meet distance', c.meet, d.getElementById('meet').textContent, d.getElementById('meet').textContent === c.meet);
     if (c.offset) { const o = d.getElementById('offset').textContent; row(c.name + ': laser spot', c.offset, o, o.startsWith(c.offset)); }
-    if (c.custom) row(c.name + ': own load kept', '3215 / 0.239', d.getElementById('velocity').value + ' / ' + d.getElementById('bc').value, d.getElementById('velocity').value === '3215' && d.getElementById('bc').value === '0.239');
+    if (c.custom) row(c.name + ': own load kept', c.v + ' / ' + c.bc, d.getElementById('velocity').value + ' / ' + d.getElementById('bc').value, Number(d.getElementById('velocity').value) === c.v && Number(d.getElementById('bc').value) === c.bc);
     if (c.metric) {
       const on = d.querySelector('[data-units="metric"]').getAttribute('aria-pressed') === 'true' && d.getElementById('paper').value === 'a4' &&
         d.querySelector('[data-plot="full"]').getAttribute('aria-pressed') === 'true';
       row(c.name + ': units, paper and chart view', 'metric, a4, full', on ? 'metric, a4, full' : 'not restored', on);
     }
     if (c.zAir) row(c.name + ': zero air', c.zAir, sel('zero-alt') + ', ' + sel('zero-temp'), sel('zero-alt') + ', ' + sel('zero-temp') === c.zAir);
+    if (c.zeroLabel) row(c.name + ': zero', c.zeroLabel, sel('zero'), sel('zero') === c.zeroLabel);
     if (c.error) row(c.name + ': shows the error', 'error shown', d.getElementById('error').hidden ? 'no error' : 'error shown', !d.getElementById('error').hidden);
+  }
+
+  // A link made before 50 yd was added: zero position 1 was (and still is) 100 yd for a rifle.
+  {
+    await load('');
+    const w = frame.contentWindow, mid = code(w, { mode: 'rifle', caliber: '308 Win (7.62x51mm)', sight: 1.5, weight: 'middle', shape: 'Pointed', zero: 100 });
+    row('Older rifle link keeps its zero position', 'zero char 1', mid.charAt(10), mid.charAt(10) === '1');
+    await load(mid);
+    row('Older rifle link opens at 100 yd', '100 yd', frame.contentDocument.getElementById('zero').selectedOptions[0]?.textContent, frame.contentDocument.getElementById('zero').selectedOptions[0]?.textContent === '100 yd');
   }
 
   await load('#1zzzzzzzzzzzz');
